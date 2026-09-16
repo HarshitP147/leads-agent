@@ -272,3 +272,130 @@ flakiness from launching Chromium many times in a short window, not a logic bug 
 noting it here since a hang that eventually self-heals via `DOMAIN_TIMEOUT_S` (240s) is
 still a bad experience if it recurs. Nothing changed in `fetcher.py` this session; worth
 a closer look in M4 if it resurfaces.
+
+2026-09-16 — M1 follow-ups: real hang fix + timing profile — Committed the M1-review
+work above (`57315d8`) first. The "sandbox flakiness" call above was wrong — same
+symptom reproduces locally, not just in my sandbox. Found and fixed the real cause.
+
+**Root cause.** `asyncio.wait_for(coro, timeout)` does not hard-kill a task when it
+times out — it cancels the task, then *awaits* that cancellation to actually finish.
+`_fetch_one`'s `finally: await page.close()` had no timeout of its own; if `close()`
+ever stalled on an unresponsive CDP round-trip (e.g. a page whose navigation never
+resolved cleanly), the domain-level `asyncio.wait_for` in `cli.py` would sit there
+waiting for that cleanup to finish, no matter what `DOMAIN_TIMEOUT_S` said. Same class
+of gap on `browser.new_context()`, `context.new_page()`, `context.close()`,
+`browser.close()`, `playwright.stop()` — none of these accept a native `timeout=` kwarg
+(confirmed against installed Playwright source, not memory), so nothing bounded them.
+Separately, a nonexistent domain's `ERR_NAME_NOT_RESOLVED` was going through the same
+3-attempt retry-with-backoff loop as a transient network error — pointless, since
+retrying a DNS failure can't fix it, and it turns one bad domain into ~10-20s of pure
+waste per candidate URL.
+
+**Fix.** Added `fetcher._bounded()` — wraps any Playwright call with no native timeout
+in `asyncio.wait_for` and converts our own timeout into a normal `PlaywrightError` (a
+real external cancellation is `CancelledError`, a `BaseException`, so it's never
+swallowed here). Applied to `chromium.launch()` (native `timeout=` now passed, 30s),
+`new_context`, `new_page`, `page.close()`, and all three ops in `close_browser()` — each
+wrapped in its own try/except in `close_browser()` too, so one stuck context can't
+prevent closing the rest. `_goto_with_retries`'s retry predicate now excludes DNS
+resolution failures (`_is_retryable_navigation_error`) — everything else (timeouts,
+429, 5xx) still retries exactly as before.
+
+**Verification.** `example.invalid` via the CLI: 240s (hung, pre-fix) → 0.6s (post-fix,
+was 8.5s pre-review-session before retries got involved). Added
+`tests/test_dns_failure_timeout.py`: one test, one event loop, 5 sequential attempts
+against a nonexistent domain, each wrapped in `asyncio.wait_for(timeout=15)`. First cut
+used `@pytest.mark.parametrize` for the 5 attempts and hung on attempt 2 — a *different*
+bug: pytest-asyncio gives each test function its own fresh event loop by default, and
+`fetcher.py`'s module-global Playwright driver is bound to whichever loop created it;
+reusing it from a second loop hangs. Not a production bug (cli.py's `asyncio.run` is one
+loop for the whole process) — a test-design pitfall specific to per-function loop
+scope. Rewrote as a single test looping internally instead, which also matches how the
+real CLI actually behaves across multiple domains. Ran the whole file 5 separate times
+(fresh process each time): 0.98s, 0.96s, 0.95s, 0.92s, 0.94s — all pass, comfortably
+under the 15s budget every time. Confirmed a real domain (vercel.com) still fetches
+normally after all this (19.1s, 7 pages, `ok`). Full suite: 10 passed.
+
+**Timing profile.** Added per-page `PROFILE` debug logging to `fetcher.py` (`goto=`,
+`networkidle=` + whether it hit its cap, `scroll=`, plus jitter delays) — see
+resilience.md's new "Profiling" section. Ran `python -m enrich baseten.co vapi.ai
+--debug` (7 pages each):
+
+| | vapi.ai (37.8s total) | baseten.co (43.1s total) |
+|---|---|---|
+| networkidle wait | 23.73s (63%) | 28.01s (65%) |
+| jitter (our own delay) | 6.54s (17%) | 6.67s (15%) |
+| goto (actual page load) | 3.79s (10%) | 6.87s (16%) |
+| scroll | 0.07s (0.2%) | 0.09s (0.2%) |
+| unaccounted (content/title RPCs, new_page/close, discovery httpx, launch) | ~3.7s (10%) | ~1.5s (3%) |
+
+Per-page `networkidle` values cluster at 3-5s — right up against the current 5s cap —
+for 12 of 13 pages fetched. These are modern marketing sites: analytics beacons, chat
+widgets, and similar background polling mean the page essentially never goes truly
+idle, so we're paying close to the full cap on almost every page, not the (rare) fast
+case. `networkidle` is the dominant cost by a wide margin — roughly two-thirds of total
+per-domain time on both sites.
+
+**Proposal (not implemented — numbers only, per instructions):**
+1. **Shorter networkidle cap (2s).** Highest leverage, lowest risk. We only need
+   settled DOM for cleaned markdown, not a fully quiet network — `domcontentloaded` (our
+   `goto` wait condition) already gets usable content well before "idle." Rough
+   estimate at a 2s cap, assuming most pages still hit the (lower) ceiling since true
+   idle rarely happens on these sites: vapi.ai 37.8s → ~28s (-26%), baseten.co 43.1s →
+   ~29s (-32%).
+2. **Fetch 2 subpages concurrently per domain.** Second-highest leverage. Subpage
+   fetching (excluding home) is currently fully sequential; the goto+networkidle
+   portion of that (≈22.25s of vapi.ai's 37.8s) could roughly halve under 2-way
+   concurrency in the same `BrowserContext`. Medium effort/risk: needs per-page error
+   isolation so one slow/failing page doesn't stall its partner, and jitter probably
+   needs rethinking for a concurrent batch (staggering 2 at a time still avoids a full
+   6-way burst, so likely keep it, possibly shrunk).
+3. **Skip scroll on non-team pages — data doesn't support this.** Scroll costs 0.07s
+   and 0.09s *combined across all 7 pages* on each site (<0.2% of total time). This is
+   not a meaningful lever; flagging so it doesn't get implemented for imagined savings
+   that the profile shows don't exist.
+4. **Not asked for, but the same class of low-risk win as #1: shrink jitter.**
+   `random.uniform(0.5, 1.5)` (avg 1.0s) fires before every one of 6 subpages —
+   6.5-6.7s of guaranteed, fully-in-our-control overhead per domain, second only to
+   networkidle. Even halving the range (`0.2-0.6s`) would save ~3s/domain for free,
+   independent of #1/#2, at effectively zero added bot-detection risk (still polite,
+   still staggered).
+
+Combining #1 and #4 alone (both trivial, low-risk, no architecture change) gets an
+estimated ~35-40% reduction in per-domain fetch time with no concurrency changes. #2 is
+the bigger structural win but the one worth reviewing most carefully before building.
+
+2026-09-16 — M1 follow-up, #1 + #4 implemented (#2 deferred to tech-debt.md, #3
+rejected) — `fetcher._settle_page` no longer just waits on `networkidle` up to 5s. It
+now races the native `networkidle` event against a new stable-text poll
+(`_wait_for_stable_text`: every 0.25s, `document.body.innerText.length` via
+`page.evaluate`; done once it's >1000 chars and unchanged across two consecutive
+polls) using `asyncio.wait(..., return_when=FIRST_COMPLETED)`, capped at
+`NETWORKIDLE_CAP_S=2.0` either way — whichever finishes first wins, the loser is
+cancelled (and that cancellation is itself bounded via `_bounded`, per the hang fix
+above — didn't want to reintroduce the exact class of bug just fixed). `--debug` logs
+which exit fired (`idle`/`stable_text`/`cap`) per page. Jitter dropped from
+`uniform(0.5, 1.5)` to `uniform(0.2, 0.6)`.
+
+**Before/after** (`python -m enrich baseten.co vapi.ai --debug`, same two sites as the
+profiling run):
+
+| | vapi.ai | baseten.co |
+|---|---|---|
+| before | 37.8s | 43.1s |
+| after | **14.5s** | **17.3s** |
+| change | **-61.6%** | **-59.9%** |
+
+Better than the ~35-40% estimated — the stable-text poll turned out to fire almost
+immediately on real content: 12 of 13 pages across both sites exited via
+`stable_text` in under ~1.1s (most well under that); only 2 pages (`baseten.co/talk-to-us`,
+`baseten.co/company` — both still-animating on load) hit the 2s cap, which is still
+less than half the old 5s cap. Full pytest suite (10 tests) still green — nothing in
+the existing coverage exercised `_settle_page`'s internals directly, so this was
+verified live rather than by a new unit test; a fake-page unit test for the race logic
+itself would need a stubbed Playwright `Page`, which felt like more scaffolding than
+the fix warranted given time. Updated `discovery-and-cleaning.md`'s Fetching section
+and `resilience.md`'s Profiling section (field names changed:
+`networkidle=`/`timeout=` → `settle=`/`exit=`) to match. Logged the deferred
+concurrent-subpage-fetch idea in `tech-debt.md` with these same numbers, per
+instruction. `ruff check`/`format`: clean.

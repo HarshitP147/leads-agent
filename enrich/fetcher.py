@@ -10,6 +10,7 @@ import asyncio
 import logging
 import random
 import re
+import time
 from typing import TYPE_CHECKING, Literal
 
 from playwright.async_api import (
@@ -30,7 +31,7 @@ from playwright.async_api import (
 from pydantic import BaseModel
 from tenacity import (
     AsyncRetrying,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential_jitter,
 )
@@ -59,6 +60,26 @@ BOT_WALL_MARKERS = (
     "access denied",
 )
 _TAG_RE = re.compile(r"<[^>]+>")
+_DNS_ERROR_MARKERS = ("ERR_NAME_NOT_RESOLVED", "ERR_NAME_RESOLUTION_FAILED")
+
+# Playwright ops with no native `timeout=` kwarg (new_context, new_page, close,
+# content, title, ...) get bounded here instead. This matters more than it looks:
+# `asyncio.wait_for` does not hard-kill a task on timeout — it cancels it, then
+# *awaits* the cancellation to finish. If a cancelled task's `finally: await
+# page.close()` hangs on an unresponsive CDP round-trip, the domain-level
+# `asyncio.wait_for` in cli.py never actually returns, no matter what
+# DOMAIN_TIMEOUT_S says. Bounding every such op is what makes that timeout real.
+_PLAYWRIGHT_OP_TIMEOUT_S = 10
+_BROWSER_LAUNCH_TIMEOUT_S = 30
+
+# Page-settle tuning (16 Sep, profiling follow-up): most marketing sites never truly
+# go network-idle (analytics/chat-widget polling), so the old 5s networkidle wait was
+# ~63-65% of total per-domain time, almost always paid in full. Race the native
+# `networkidle` event against a cheap stable-text poll and take whichever fires first,
+# capped at NETWORKIDLE_CAP_S either way. See discovery-and-cleaning.md, "Cleaning".
+NETWORKIDLE_CAP_S = 2.0
+STABLE_TEXT_POLL_S = 0.25
+STABLE_TEXT_MIN_CHARS = 1000
 
 
 class FetchedPage(BaseModel):
@@ -85,13 +106,27 @@ _contexts: dict[str, BrowserContext] = {}
 _browser_lock = asyncio.Lock()
 
 
+async def _bounded(coro, *, op: str, timeout_s: float = _PLAYWRIGHT_OP_TIMEOUT_S):
+    """Await `coro` with a hard ceiling. Raises `PlaywrightError` (not `TimeoutError`)
+    on our own timeout so callers can handle it exactly like any other navigation
+    failure; a genuine external cancellation (`asyncio.CancelledError`) is a
+    `BaseException`, not caught here, and still propagates normally."""
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout_s)
+    except TimeoutError as exc:
+        raise PlaywrightError(f"{op} exceeded {timeout_s}s") from exc
+
+
 async def _get_browser() -> Browser:
     global _playwright, _browser
     async with _browser_lock:
         if _browser is None:
             settings = get_settings()
             _playwright = await async_playwright().start()
-            _browser = await _playwright.chromium.launch(headless=settings.headless)
+            _browser = await _playwright.chromium.launch(
+                headless=settings.headless,
+                timeout=_BROWSER_LAUNCH_TIMEOUT_S * 1000,
+            )
         return _browser
 
 
@@ -108,10 +143,13 @@ async def _get_context(domain: str) -> BrowserContext:
     if domain in _contexts:
         return _contexts[domain]
     browser = await _get_browser()
-    context = await browser.new_context(
-        user_agent=USER_AGENT,
-        viewport={"width": 1366, "height": 900},
-        locale="en-US",
+    context = await _bounded(
+        browser.new_context(
+            user_agent=USER_AGENT,
+            viewport={"width": 1366, "height": 900},
+            locale="en-US",
+        ),
+        op="new_context",
     )
     await context.route("**/*", _block_heavy_resources)
     _contexts[domain] = context
@@ -120,16 +158,29 @@ async def _get_context(domain: str) -> BrowserContext:
 
 async def close_browser() -> None:
     """Close every context + the shared browser. Call once at the end of the run
-    (see docs/ARCHITECTURE.md, Run level: "Browser closed in finally")."""
+    (see docs/ARCHITECTURE.md, Run level: "Browser closed in finally").
+
+    Each close is individually bounded and independently try/excepted: one stuck or
+    already-broken context must not prevent closing the rest, the browser, or the
+    Playwright driver itself."""
     global _playwright, _browser
     for context in list(_contexts.values()):
-        await context.close()
+        try:
+            await _bounded(context.close(), op="context.close")
+        except Exception:
+            logger.debug("context.close() failed or timed out", exc_info=True)
     _contexts.clear()
     if _browser is not None:
-        await _browser.close()
+        try:
+            await _bounded(_browser.close(), op="browser.close")
+        except Exception:
+            logger.debug("browser.close() failed or timed out", exc_info=True)
         _browser = None
     if _playwright is not None:
-        await _playwright.stop()
+        try:
+            await _bounded(_playwright.stop(), op="playwright.stop")
+        except Exception:
+            logger.debug("playwright.stop() failed or timed out", exc_info=True)
         _playwright = None
 
 
@@ -153,17 +204,29 @@ def _looks_like_bot_wall(http_status: int | None, html: str, title: str) -> bool
 # --- Navigation with retries ---------------------------------------------------------
 
 
+def _is_retryable_navigation_error(exc: BaseException) -> bool:
+    """Retry network errors / navigation timeouts / 429 / 5xx — but not a DNS
+    resolution failure. The domain doesn't exist; retrying with the same timeout 2
+    more times (plus backoff) can't change that, and it turns "the domain is bad" into
+    a multi-minute wait for no benefit. Never retry 404 either (handled by the
+    caller, not raised here)."""
+    if not isinstance(exc, (PlaywrightTimeoutError, PlaywrightError)):
+        return False
+    message = str(exc)
+    return not any(marker in message for marker in _DNS_ERROR_MARKERS)
+
+
 async def _goto_with_retries(
     page: Page, url: str, *, timeout_s: int
 ) -> PlaywrightResponse | None:
-    """2 retries, exponential backoff + jitter, only on network errors / navigation
-    timeouts / 429 / 5xx. Never retry 404 (handled by the caller, not raised here)."""
+    """Up to 2 retries, exponential backoff + jitter. See
+    `_is_retryable_navigation_error` for what actually gets retried."""
     response: PlaywrightResponse | None = None
 
     async for attempt in AsyncRetrying(
         stop=stop_after_attempt(3),
         wait=wait_exponential_jitter(initial=1, max=8),
-        retry=retry_if_exception_type((PlaywrightTimeoutError, PlaywrightError)),
+        retry=retry_if_exception(_is_retryable_navigation_error),
         reraise=True,
     ):
         with attempt:
@@ -181,15 +244,66 @@ async def _goto_with_retries(
     return response
 
 
-async def _settle_page(page: Page, *, timeout_s: int) -> None:
+async def _wait_for_stable_text(page: Page) -> None:
+    """Poll `document.body.innerText.length`; return once it's > STABLE_TEXT_MIN_CHARS
+    and unchanged across two consecutive polls. Runs until cancelled by the caller if
+    the text never stabilizes — the NETWORKIDLE_CAP_S race always bounds it."""
+    previous_length = -1
+    while True:
+        await asyncio.sleep(STABLE_TEXT_POLL_S)
+        try:
+            length = await page.evaluate(
+                "document.body ? document.body.innerText.length : 0"
+            )
+        except PlaywrightError:
+            return  # page navigated away or closed; nothing more to poll
+        if length > STABLE_TEXT_MIN_CHARS and length == previous_length:
+            return
+        previous_length = length
+
+
+async def _settle_page(page: Page, *, timeout_s: int) -> tuple[float, str, float]:
+    """Wait for whichever fires first: the native `networkidle` event, or our own
+    stable-text poll — capped at NETWORKIDLE_CAP_S either way. Returns
+    (settle_s, exit_reason, scroll_s) where exit_reason is "idle" / "stable_text" /
+    "cap", logged per page under --debug (see discovery-and-cleaning.md, "Cleaning")."""
+    t0 = time.monotonic()
+    idle_task = asyncio.ensure_future(page.wait_for_load_state("networkidle"))
+    stable_task = asyncio.ensure_future(_wait_for_stable_text(page))
+
+    exit_reason = "cap"
     try:
-        await page.wait_for_load_state("networkidle", timeout=5000)
-    except PlaywrightTimeoutError:
-        pass  # SPAs often never go idle; not a failure
+        done, _pending = await asyncio.wait(
+            {idle_task, stable_task},
+            timeout=NETWORKIDLE_CAP_S,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if idle_task in done and idle_task.exception() is None:
+            exit_reason = "idle"
+        elif stable_task in done and stable_task.exception() is None:
+            exit_reason = "stable_text"
+    finally:
+        for task in (idle_task, stable_task):
+            if not task.done():
+                task.cancel()
+        try:
+            await _bounded(
+                asyncio.gather(idle_task, stable_task, return_exceptions=True),
+                op="settle_cleanup",
+                timeout_s=5,
+            )
+        except Exception:
+            logger.debug("settle_page cleanup failed or timed out", exc_info=True)
+    settle_s = time.monotonic() - t0
+
+    t1 = time.monotonic()
     try:
         await page.mouse.wheel(0, 2000)  # trigger lazy-loaded content
     except PlaywrightError:
         pass
+    scroll_s = time.monotonic() - t1
+
+    return settle_s, exit_reason, scroll_s
 
 
 def _classify_navigation_error(exc: Exception) -> str:
@@ -217,12 +331,22 @@ async def _fetch_one(
     domain: str, url: str, *, kind: str, discovered_by: str, timeout_s: int
 ) -> tuple[FetchedPage, ErrorRecord | None]:
     context = await _get_context(domain)
-    page = await context.new_page()
+    page = await _bounded(context.new_page(), op="new_page")
     try:
+        goto_t0 = time.monotonic()
         response = await _goto_with_retries(page, url, timeout_s=timeout_s)
-        await _settle_page(page, timeout_s=timeout_s)
-        html = await page.content()
-        title = await page.title()
+        goto_s = time.monotonic() - goto_t0
+        settle_s, exit_reason, scroll_s = await _settle_page(page, timeout_s=timeout_s)
+        logger.debug(
+            "PROFILE %s goto=%.2fs settle=%.2fs(exit=%s) scroll=%.2fs",
+            url,
+            goto_s,
+            settle_s,
+            exit_reason,
+            scroll_s,
+        )
+        html = await _bounded(page.content(), op="content")
+        title = await _bounded(page.title(), op="title")
         http_status = response.status if response is not None else None
         final_url = page.url
 
@@ -232,8 +356,8 @@ async def _fetch_one(
                 await page.reload(
                     wait_until="domcontentloaded", timeout=timeout_s * 1000
                 )
-                html = await page.content()
-                title = await page.title()
+                html = await _bounded(page.content(), op="content")
+                title = await _bounded(page.title(), op="title")
             except PlaywrightError:
                 pass
             if _looks_like_bot_wall(http_status, html, title):
@@ -291,7 +415,14 @@ async def _fetch_one(
             )
         return fetched, error
     finally:
-        await page.close()
+        # Bounded and swallowed on purpose: this runs during cancellation too (the
+        # domain-level asyncio.wait_for in cli.py cancels-then-awaits), and an
+        # unbounded or raising close() here would block that cancellation from ever
+        # completing, or mask whatever exception is already propagating.
+        try:
+            await _bounded(page.close(), op="page.close")
+        except Exception:
+            logger.debug("page.close() failed or timed out for %s", url, exc_info=True)
 
 
 # --- Nodes --------------------------------------------------------------------------
@@ -377,7 +508,9 @@ async def fetch_subpages(state: DomainState) -> dict:
     errors: list[ErrorRecord] = []
 
     for candidate in candidates:
-        await asyncio.sleep(random.uniform(0.5, 1.5))
+        jitter_s = random.uniform(0.2, 0.6)
+        await asyncio.sleep(jitter_s)
+        logger.debug("PROFILE jitter=%.2fs before %s", jitter_s, candidate.url)
         try:
             fetched, error = await _fetch_one(
                 domain,

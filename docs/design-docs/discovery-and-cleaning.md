@@ -5,14 +5,38 @@
 - Async Playwright, Chromium, `headless` from settings. One browser, one context per domain.
 - Context: realistic desktop UA, `viewport 1366x900`, `locale en-US`, block heavy resources
   via `context.route` (images, media, fonts). Keep stylesheets off too; we don't render visually.
-- `page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_S*1000)`, then
-  `page.wait_for_load_state("networkidle", timeout=~5s)` inside try/except (SPAs often never go
-  idle; a timeout here is **not** a failure). Then a short scroll to trigger lazy content.
+- `page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_S*1000)`, then settle
+  (below), then a short scroll to trigger lazy content.
 - Capture: final URL (after redirects), HTTP status from the response, `page.content()`, title.
 - Retries: `tenacity`, 2 retries, exponential backoff with jitter, only on network errors /
-  navigation timeouts / 429 / 5xx. Never retry 404.
+  navigation timeouts / 429 / 5xx. Never retry 404, and never retry a DNS resolution
+  failure (permanent — the domain doesn't exist, retrying can't fix that).
 - For a 429, respect `Retry-After` if present (cap at 10 s).
 - Normalise input: strip scheme/paths, try `https://{domain}` then `https://www.{domain}`.
+
+### Settling the page (16 Sep, profiling follow-up)
+
+The old design waited on `page.wait_for_load_state("networkidle", timeout=5000)` alone.
+Profiling `baseten.co`/`vapi.ai` (`--debug`'s per-page `PROFILE` log) showed this was
+**63-65% of total per-domain fetch time**, because modern marketing sites never truly go
+network-idle — analytics beacons and chat widgets keep polling — so almost every page
+paid close to the full 5 s, not the rare fast case.
+
+Now `fetcher._settle_page` races two things, capped at `NETWORKIDLE_CAP_S = 2.0`:
+- the native `networkidle` event, and
+- a stable-text poll (`_wait_for_stable_text`): every `STABLE_TEXT_POLL_S = 0.25` s,
+  read `document.body.innerText.length`; done once it's `> STABLE_TEXT_MIN_CHARS = 1000`
+  and unchanged across two consecutive polls.
+
+Whichever finishes first wins; the loser is cancelled. `--debug` logs which one fired
+(`exit=idle` / `exit=stable_text` / `exit=cap`) per page, alongside `goto=`/`scroll=`
+timings — see the measured before/after in build-plan.md's Progress Log (16 Sep):
+`vapi.ai` 37.8s → 14.5s, `baseten.co` 43.1s → 17.3s (both ~60% faster). In practice
+almost every page now exits via `stable_text` in under ~1.1s; only pages whose text
+kept changing throughout (still-animating content) hit the 2 s cap, which is still
+better than the old flat 5 s regardless.
+- Politeness jitter between subpages: `random.uniform(0.2, 0.6)` (was `0.5-1.5`) — still
+  staggered, no longer the second-largest cost in the profile (was 15-17% of total time).
 
 ### Bot-wall detection
 
