@@ -34,21 +34,43 @@ Design docs index: `docs/design-docs/index.md`.
 
 ## Commands
 
+Uses `uv` (see `pyproject.toml` + `uv.lock`). **Never run a non-editable install of
+this project** (`uv pip install .` / `pip install .` without `-e`) — it drops a real,
+unrelated build of our own top-level `enrich/` package into `site-packages`, which can
+shadow the local one depending on import order (this happened once; see
+docs/references/stack.md Gotchas).
+
 ```bash
-# setup (venv already exists and must be Python >= 3.11 — browser-use requires it)
-source .venv/bin/activate
-pip install -r requirements.txt
-playwright install chromium
+# setup — must be Python >= 3.11 (browser-use requires it)
+uv sync                        # creates/updates .venv, editable-installs this project
+uv run playwright install chromium
 cp .env.example .env          # then fill keys
 
 # run
-python -m enrich postman.com supabase.com vapi.ai --out output.json
-python -m enrich example.invalid --timeout 1   # failure-path demo
+uv run python -m enrich postman.com supabase.com vapi.ai --out output.json
+uv run python -m enrich example.invalid --timeout 1   # failure-path demo
 
 # checks
-pytest -q
-ruff check . && ruff format --check .
+uv run pytest -q
+uv run ruff check . && uv run ruff format --check .
+
+# keep requirements.txt in sync with pyproject.toml/uv.lock (assignment deliverable —
+# some reviewers won't have uv; regenerate after any dependency change)
+uv export --no-hashes --no-emit-project -o requirements.txt
 ```
+
+Plain-`pip` fallback (no `uv` installed) — same venv already exists at `.venv/`:
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+playwright install chromium
+```
+
+No install step for our own package needed either way — `pyproject.toml`'s
+`pythonpath = ["."]` covers pytest, and `python -m enrich`/`uv run python -m enrich`
+already puts the repo root on `sys.path` by itself. Just don't `pip install .`
+(non-editable) — see the warning above.
 
 ## Working rules for agents
 

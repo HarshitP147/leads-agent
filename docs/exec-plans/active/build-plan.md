@@ -473,3 +473,48 @@ team-card extraction, team-cards-only-for-team/leadership-kind) and
 domain *and* the email domain, which collided with `EMAIL_JUNK_SUBSTRINGS`'s own
 literal-placeholder-domain check and failed 4/6 tests; switched to `acme-corp.io`).
 Full suite: 22 passed. `ruff check`/`format`: clean on `enrich/`+`tests/`.
+
+2026-09-16 — switched to `uv`; fixed a real name-collision bug — Plain `pytest`
+started failing with `ImportError`. Root cause wasn't what it first looked like: a
+completely unrelated *real* PyPI package literally named `enrich`
+(pycontribs/enrich — a console/logging helper, nothing to do with us) had been
+installed directly into `.venv/site-packages` at some point (`pip show enrich` showed
+`Required-by:` empty — nothing in our own dependency tree pulls it in, so this was a
+one-off manual/accidental install, most likely a non-editable `pip install .` /
+`uv pip install .` of our own project landing under that name, or a stray
+`pip install enrich`). Because our own top-level import package is *also* literally
+named `enrich`, whichever copy import resolution finds first wins — a real,
+unavoidable collision at the package-name level that has nothing to do with our
+`pyproject.toml`'s distribution name (deliberately `leads-agent`, not `enrich`, to
+avoid ever being confused with the real PyPI package — but the *import* name is fixed
+by every module's `from enrich.xxx import ...` and can't change without a repo-wide
+rename).
+
+**Fix.** `pip uninstall enrich` removed the colliding copy. Built out `pyproject.toml`
+properly (it already had a bare `[tool.pytest.ini_options]` with `pythonpath = ["."]`
++ `asyncio_mode = "auto"` from earlier debugging — kept both): added `[project]` with
+all direct dependencies (plus `pydantic-settings`, which was imported directly in
+`config.py` since M0 but never actually listed in `requirements.txt` — it only worked
+because `browser-use` pins it transitively), a `[dependency-groups] dev` group for
+pytest/ruff, and `[build-system]`/`[tool.hatch.build.targets.wheel] packages =
+["enrich"]` (hatchling — distribution name `leads-agent`, import package `enrich`,
+deliberately different per the collision above). `uv sync` resolved all 316 packages
+with **zero new conflicts** against every pin already worked out for `pip` across the
+last few sessions (langchain-anthropic/openai, python-dotenv, rich, tiktoken) and did a
+proper *editable* install of our own project — `pythonpath = ["."]` in pytest config
+means plain `pytest` now resolves the local `enrich/` correctly even without any
+install at all, so this class of bug can't recur regardless of what else gets
+installed alongside it. Regenerated `requirements.txt` via `uv export --no-hashes
+--no-emit-project -o requirements.txt` — now a fully-pinned direct+transitive lock
+(1253 lines, ~316 packages) rather than the old hand-curated direct-deps-only list;
+still standard pip-compatible syntax (`# via <pkg>` comments, PEP 508 markers), so
+`pip install -r requirements.txt` works with zero `uv` installed. Added `README.md`
+(previously didn't exist) with just a Setup section — uv path first, plain-pip
+fallback second, both explicitly warning against a non-editable install of this
+project; the rest of the README (what/why, diagram, sample output, limitations) is
+M7's job. Updated `AGENTS.md`'s Commands section the same way.
+
+**Verified**: `pytest -q` (venv activated, no uv involved) → 22 passed. `uv run pytest
+-q` → 22 passed. `uv run python -m enrich --help` → works. `uv run ruff check .` →
+clean. From now on: `uv sync` / `uv run ...` for everything; never
+`pip install .`/`uv pip install .` (non-editable) on this project again.

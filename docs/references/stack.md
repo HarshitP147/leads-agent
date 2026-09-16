@@ -132,6 +132,41 @@ Confirm against the **installed** source, then record findings below:
 
 <!-- Append: date — package — what surprised you — what we did -->
 
+- 2026-09-16 — Plain `pytest` failed with an `ImportError` from a completely
+  unrelated real PyPI package: `enrich` (pycontribs/enrich, a console/logging helper —
+  `Home-page: https://github.com/pycontribs/enrich`, `Author: Sorin Sbarnea`) had at
+  some point been installed directly into `.venv/site-packages` (`pip show enrich`
+  showed `Required-by:` empty — nothing in our own dependency tree pulls it in, so this
+  was a one-off manual/accidental install, e.g. a stray `pip install enrich` or a
+  non-editable `pip install .`/`uv pip install .` of *our own* project landing under
+  that name). Because our top-level import package is also literally named `enrich`,
+  whichever one import resolution finds first wins — a real, unavoidable name
+  collision at the package-name level (not the PyPI distribution-name level: our
+  `pyproject.toml`'s distribution is named `leads-agent`, specifically so it never gets
+  confused with the real `enrich` package on PyPI, but the *import* name `enrich/` is
+  fixed by every module's `from enrich.xxx import ...` and can't change without a
+  repo-wide rename). Fixed by uninstalling it (`pip uninstall enrich`) and switching the
+  whole project to `uv`-managed workflow (see AGENTS.md Commands): `uv sync` does a
+  proper **editable** install of our own project from `pyproject.toml`, and
+  `pythonpath = ["."]` in `[tool.pytest.ini_options]` makes plain `pytest` resolve the
+  local `enrich/` directory correctly even without any install at all. **Never run a
+  non-editable install of this project** (`pip install .` / `uv pip install .` without
+  `-e`) — that's almost certainly how the real `enrich` got in the way in the first
+  place.
+- 2026-09-16 — `pydantic-settings` (imported directly in `config.py` since M0) was
+  never added to `requirements.txt` — it only worked because `browser-use` pins it
+  transitively (`pydantic-settings==2.15.0`). Added it to `pyproject.toml`'s
+  dependencies explicitly now that we're tracking direct deps properly there.
+- 2026-09-16 — `uv sync` resolves and installs cleanly against every pin already
+  worked out for `pip` (langchain-anthropic/openai, python-dotenv, rich, tiktoken — see
+  the entries below) with zero new conflicts; uv's resolver just had to verify the
+  same exact pins, not find new ones. `uv export --no-hashes --no-emit-project -o
+  requirements.txt` regenerates a fully-pinned (direct + transitive, ~316 packages)
+  `requirements.txt` from `uv.lock` — verbose (`# via <package>` comments per line) but
+  standard pip-compatible syntax, so `pip install -r requirements.txt` still works with
+  no `uv` installed at all. Run that export command again after any dependency change;
+  don't hand-edit `requirements.txt` anymore, it's now generated.
+
 - 2026-09-16 — `tiktoken` was already installed transitively (via `langchain-openai`),
   and its `cl100k_base` encoding works fully offline once its BPE file is cached (first
   call needs network to download it — fine in this environment, but note it if running
