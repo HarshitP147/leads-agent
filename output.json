@@ -1,0 +1,30 @@
+[
+  {
+    "domain": "vercel.com",
+    "status": "failed",
+    "profile": null,
+    "confidence": {
+      "score": 0.0,
+      "components": {}
+    },
+    "pages": [],
+    "errors": [
+      {
+        "stage": "cli",
+        "kind": "internal",
+        "message": "",
+        "url": null
+      }
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "llm_calls": 0,
+      "search_calls": 0,
+      "est_cost_usd": 0.0,
+      "by_component": {}
+    },
+    "duration_s": 1.8112165420025121,
+    "scraped_at": "2026-09-16T11:42:18.421381+00:00"
+  }
+]

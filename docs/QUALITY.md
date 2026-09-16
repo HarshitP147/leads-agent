@@ -17,7 +17,7 @@
 | test_verify.py | invented name dropped; middle-name match; bad LinkedIn URL nulled |
 | test_scoring.py | empty → 0.0; perfect → ≥0.9; blocked penalty applied |
 | test_bot_wall.py | Cloudflare-style fixture HTML detected |
-| test_graph_failure.py | graph with a fetcher stub that raises still returns `failed` DomainResult |
+| test_pipeline_failure.py | pipeline with a fetcher stub that raises still returns `failed` DomainResult |
 
 ## End-to-end matrix (manual, before submission)
 
@@ -28,7 +28,7 @@
 | `python -m enrich supabase.com --timeout 1` | `failed`/`partial` with `timeout`, exit 0 |
 | unset `TAVILY_API_KEY` and run | runs; route_log notes search skipped |
 | `BROWSER_USE_ENABLED=false` | runs deterministic path only |
-| `ANTHROPIC_API_KEY=bad` | `llm_error`, run completes |
+| `DEEPSEEK_API_KEY=bad` | `llm_error`, run completes |
 
 Validate output: `python -c "import json;from enrich.models import DomainResult as D;[D.model_validate(x) for x in json.load(open('output.json'))]"`.
 

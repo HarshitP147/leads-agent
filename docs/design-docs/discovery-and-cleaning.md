@@ -45,12 +45,18 @@ Scoring (kind, weight), match against path and anchor text, lowercase:
 
 | kind | keywords |
 |---|---|
-| leadership | leadership, founders, management, executives |
+| leadership | leadership, founders, executives, management-team, leadership-team, our-leadership, exec-team |
 | team | team, people, our-team |
 | about | about, about-us, story, mission |
 | company | company, careers? (low weight) |
 | contact | contact, support, help, sales |
 | pricing | pricing, plans |
+
+Bare `management` was tried and dropped during M1 (16 Sep): it false-positives hard on
+product-marketing sites that sell "X management" features (vapi.ai's own
+`/custom-agents/*-management-agent` pages outscored every real leadership candidate in
+the M1 smoke test — all 6 picked slots were junk). Only compound, unambiguous forms
+(`management-team`, `leadership-team`, ...) are kept.
 
 Penalise: `/blog/`, `/docs/`, `/changelog`, `/legal`, `/terms`, `/privacy`, language
 prefixes (`/de/`, `/ja/`), query strings, file extensions (`.pdf`, `.png`).

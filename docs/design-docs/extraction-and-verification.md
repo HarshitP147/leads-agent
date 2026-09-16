@@ -2,13 +2,34 @@
 
 ## Extraction (`extractor.py`)
 
-- Chat model from `LLM_PROVIDER` + `EXTRACTION_MODEL` (`langchain-anthropic` or
-  `langchain-openai`), `temperature=0`, timeout ~60 s, `max_retries=2`.
-- `structured = llm.with_structured_output(LLMExtraction, include_raw=True)`.
-  `include_raw=True` gives us the `AIMessage` so we can read `usage_metadata` and
-  detect parse failures (`parsing_error`) without exceptions.
-- On parse failure: one repair retry with the error message appended. If it fails again,
-  record `ErrorRecord(kind="parse_error")` and leave `extraction=None`.
+- LLM provider is **DeepSeek** (`LLM_PROVIDER=deepseek`), via `langchain-deepseek`'s
+  `ChatDeepSeek(model=EXTRACTION_MODEL, api_key=DEEPSEEK_API_KEY, temperature=0)`.
+  `ChatDeepSeek` subclasses `langchain_openai.BaseChatOpenAI`, so it gets the same
+  `with_structured_output`/`bind_tools`/`usage_metadata` shapes verified in stack.md —
+  `LLM_PROVIDER` staying a `Literal["deepseek", "anthropic", "openai"]` in `config.py`
+  is a same-interface swap, not a special case. `config.Settings` needs a
+  `deepseek_api_key` field alongside the Anthropic/OpenAI ones (done in M3, not M0).
+  Timeout ~60 s, `max_retries=2`.
+- **Structured output — function calling first, JSON-mode fallback:**
+  `structured = llm.with_structured_output(LLMExtraction, method="function_calling",
+  include_raw=True)`. `include_raw=True` gives us the `AIMessage` so we can read
+  `usage_metadata` and detect parse failures (`parsing_error`) without exceptions.
+  Do **not** pass `strict=True` — DeepSeek routes that to its beta endpoint and requires
+  every schema property to be marked `required`, which `LLMExtraction` deliberately isn't
+  (several fields are legitimately optional, e.g. `title`, `linkedin_url`,
+  `missing_info_notes`); reshaping the schema to satisfy strict mode isn't worth losing
+  those semantics.
+- On `parsing_error`: one repair retry (`function_calling` again, error message appended
+  to the prompt). If that also fails, fall back once to
+  `llm.with_structured_output(LLMExtraction, method="json_mode", include_raw=True)` —
+  DeepSeek's JSON mode *only* guarantees syntactically valid JSON, not schema conformance
+  (per DeepSeek's docs: you still have to instruct the schema in the prompt yourself), so
+  parse the raw content with `LLMExtraction.model_validate_json(raw.content)` inside a
+  try/except rather than trusting `parsed`. If that also fails, record
+  `ErrorRecord(kind="parse_error")` and leave `extraction=None`.
+- `langchain-deepseek` also translates a malformed-JSON response from the DeepSeek API
+  itself into `JSONDecodeError` at the HTTP layer (seen in its source, not just docs) —
+  that's a `kind="llm_error"`, not a `parse_error`; catch it separately.
 - One LLM call per domain (all pages in one prompt). Do not call per page.
 
 ### Prompt layout

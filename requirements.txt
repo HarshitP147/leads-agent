@@ -5,6 +5,7 @@ langgraph==1.2.11
 langchain-core==1.6.3
 langchain-anthropic==1.3.0
 langchain-openai==1.1.14
+langchain-deepseek==1.1.0
 browser-use==0.13.10
 playwright==1.63.0
 trafilatura==2.2.0

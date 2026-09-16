@@ -10,6 +10,7 @@ If the venv is 3.10, recreate it before anything else.
 | langgraph | 1.2.11 | Pipeline graph |
 | langchain-core | 1.6.3 | Messages, structured output |
 | langchain-anthropic / langchain-openai | 1.3.0 / 1.1.14 | Chat models (relaxed from 1.7.2/1.6.2 — see Gotchas) |
+| langchain-deepseek | 1.1.0 | Chat model for extraction (16 Sep decision — see build-plan.md Decisions) |
 | browser-use | 0.13.10 | Agentic navigation fallback |
 | playwright | 1.63.0 | Headless Chromium |
 | trafilatura | 2.2.0 | HTML → markdown |
@@ -78,6 +79,54 @@ Confirm against the **installed** source, then record findings below:
   error on a sample fragment; combine with `include_formatting=True`, `include_links=True` for
   richer markdown when cleaning pages in `cleaner.py`.
 
+### DeepSeek (16 Sep — LLM provider switch, checked against api-docs.deepseek.com + installed `langchain-deepseek==1.1.0` source)
+
+- **`langchain-deepseek==1.1.0` installs clean against our existing pins** — no relaxing
+  needed. It requires `langchain-core<2.0.0,>=1.4.0` (we have 1.6.3 ✓) and
+  `langchain-openai<2.0.0,>=1.1.0` (we have 1.1.14 ✓, the version already forced down for
+  browser-use). `pip install --dry-run` confirmed zero new conflicts before installing for real.
+- **Model ids**: DeepSeek's live `/chat/completions` API reference (most authoritative —
+  it's the literal `model` enum) currently lists **`deepseek-flash`** and
+  **`deepseek-v4-pro`**. Separately, DeepSeek's changelog says `deepseek-chat`
+  (non-thinking) and `deepseek-reasoner` (thinking) are still-live aliases that get
+  upgraded to whatever the current model generation is (last noted: DeepSeek-V3.1,
+  2025-08-21) — these older alias names may still work but the API reference doesn't list
+  them as the current canonical ids. **Recorded `EXTRACTION_MODEL=deepseek-v4-pro`** in
+  `.env.example` as the higher-quality option; `deepseek-flash` is the cheaper/faster
+  alternative if cost becomes a concern in M6. Re-check this before the final submission
+  run in case DeepSeek renames again before 18 Sep.
+- **Function calling**: confirmed via docs examples (`tools` param, `type: "function"`,
+  standard OpenAI-shaped tool-call loop) — DeepSeek supports it natively, which is what
+  LangChain's `with_structured_output(..., method="function_calling")` (the default) uses
+  under the hood.
+- **JSON mode**: `response_format: {"type": "json_object"}` is supported, but per DeepSeek's
+  own docs, "you must also instruct the model to produce JSON yourself via a system or
+  user message" — i.e. JSON mode guarantees syntactically valid JSON, **not** schema
+  conformance. This is why our fallback path parses with
+  `LLMExtraction.model_validate_json(...)` in a try/except rather than trusting a
+  `parsed` field.
+- **`ChatDeepSeek` (`langchain_deepseek.chat_models`)**, verified by reading the installed
+  source directly:
+  - Subclasses `langchain_openai.chat_models.base.BaseChatOpenAI` → inherits the same
+    `with_structured_output`, `bind_tools`, and `usage_metadata` shapes already verified
+    above for `AIMessage`. No provider-specific usage-accounting code needed in `cost.py`.
+  - Constructor takes `model=` (aliased to internal `model_name`), `api_key=` (else reads
+    `DEEPSEEK_API_KEY` env var), `base_url=` (else reads `DEEPSEEK_API_BASE`, default
+    `https://api.deepseek.com/v1`).
+  - `with_structured_output(schema, method="function_calling" | "json_mode", include_raw=True,
+    strict=None)`. `method="json_schema"` is silently coerced to `"function_calling"`
+    (DeepSeek has no separate strict-JSON-schema endpoint the way OpenAI does).
+  - **`strict=True` switches to DeepSeek's beta endpoint** (`https://api.deepseek.com/beta`)
+    for schema-enforced tool calls, but its docstring warns "DeepSeek's strict mode
+    requires all object properties to be marked as required in the schema." Our
+    `LLMExtraction` has several genuinely optional fields (`title`, `linkedin_url`,
+    `missing_info_notes`, ...), so we deliberately do **not** use `strict=True` — see
+    extraction-and-verification.md for the repair-retry + json_mode fallback we use instead.
+  - `_generate`/`_stream` wrap the OpenAI-SDK call and re-raise `JSONDecodeError` with a
+    DeepSeek-specific message when the API itself returns a malformed response — catch
+    this as `kind="llm_error"`, separate from our own `parsing_error`/`kind="parse_error"`
+    handling of a well-formed-JSON-but-wrong-shape response.
+
 ## Gotchas log
 
 <!-- Append: date — package — what surprised you — what we did -->
@@ -96,6 +145,11 @@ Confirm against the **installed** source, then record findings below:
   `langchain-core>=1.2.31,<2.0.0` (compat) and langgraph 1.2.11 wants
   `langchain-core>=1.4.7,<2` — all satisfied by our pinned `langchain-core==1.6.3`.
   `requirements.txt` updated to the resolved set; full install then succeeded.
+- 2026-09-16 — `langchain-deepseek==1.1.0` needed for the DeepSeek provider switch (see
+  build-plan.md Decisions) installed with **zero** conflicts against our existing pins —
+  no relaxing required this time. Full findings (model ids, function-calling/json_mode
+  support, `strict=True`'s beta-endpoint + all-fields-required requirement) in the
+  dedicated DeepSeek section above.
 - 2026-09-16 — Freshly created `.venv` had no `pip` executable (only a broken
   interpreter) and pip 25.3's `ensurepip` doesn't drop a `pip` symlink either — only
   `pip3`/`pip3.13`. Use `.venv/bin/python -m pip ...` rather than assuming
