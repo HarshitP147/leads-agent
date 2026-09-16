@@ -123,6 +123,7 @@ class DomainState(TypedDict, total=False):
     candidates: list[CandidateLink]
     pages: list[FetchedPage]              # raw fetch results (html kept in memory only)
     cleaned: list[CleanPage]              # url, kind, markdown, token counts
+    team_cards: list[TeamCard]            # name/role/linkedin from team/leadership card grids
     candidate_emails: list[FoundEmail]    # from regex/mailto, with source_url
     linkedin_links: list[FoundLink]       # linkedin.com/in/... hrefs with anchor text + source_url
     extraction: LLMExtraction | None
@@ -135,6 +136,8 @@ class DomainState(TypedDict, total=False):
     started_at: float
 ```
 
-`FetchedPage`, `CandidateLink`, `CleanPage`, `FoundEmail`, `FoundLink`, `UsageEvent` are
-small internal dataclasses/models defined next to the module that produces them.
-Never put raw HTML into `DomainResult`.
+`FetchedPage`, `CandidateLink`, `CleanPage`, `TeamCard`, `FoundEmail`, `FoundLink`,
+`UsageEvent` are small internal dataclasses/models defined next to the module that
+produces them (`TeamCard` lives in `cleaner.py` — added 16 Sep, M2 — extracted from
+team/leadership page card grids before stripping, consumed by `extractor.py` in M3 as
+its own prompt block). Never put raw HTML into `DomainResult`.

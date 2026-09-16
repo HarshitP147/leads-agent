@@ -9,7 +9,7 @@ from __future__ import annotations
 import operator
 from typing import Annotated, TypedDict
 
-from enrich.cleaner import CleanPage
+from enrich.cleaner import CleanPage, TeamCard
 from enrich.cost import UsageEvent
 from enrich.discovery import CandidateLink, FoundEmail, FoundLink
 from enrich.fetcher import FetchedPage
@@ -29,6 +29,7 @@ class DomainState(TypedDict, total=False):
     candidates: list[CandidateLink]
     pages: list[FetchedPage]  # raw fetch results (html kept in memory only)
     cleaned: list[CleanPage]
+    team_cards: list[TeamCard]
     candidate_emails: list[FoundEmail]
     linkedin_links: list[FoundLink]
     extraction: LLMExtraction | None

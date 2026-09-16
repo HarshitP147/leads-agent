@@ -16,6 +16,7 @@ If the venv is 3.10, recreate it before anything else.
 | trafilatura | 2.2.0 | HTML → markdown |
 | beautifulsoup4 + lxml | 4.15.0 / 6.1.3 | DOM stripping, link/email extraction |
 | httpx | 0.28.1 | robots/sitemap fetch |
+| tiktoken | 0.14.0 | token counts (cl100k_base — approximation, not DeepSeek's real tokenizer; see M2 note) |
 | tavily-python | 0.8.3 | LinkedIn search |
 | pydantic | 2.13.5 | Schemas |
 | tenacity | 9.1.4 | Retries |
@@ -130,6 +131,17 @@ Confirm against the **installed** source, then record findings below:
 ## Gotchas log
 
 <!-- Append: date — package — what surprised you — what we did -->
+
+- 2026-09-16 — `tiktoken` was already installed transitively (via `langchain-openai`),
+  and its `cl100k_base` encoding works fully offline once its BPE file is cached (first
+  call needs network to download it — fine in this environment, but note it if running
+  fully air-gapped). Added it to `requirements.txt` explicitly since `cleaner.py` now
+  imports it directly rather than relying on a transitive dep. It's OpenAI's tokenizer,
+  not DeepSeek's — DeepSeek doesn't publish a `tiktoken`-compatible encoding, so
+  `raw_tokens`/`clean_tokens` are a consistent *approximation* for the before/after
+  reduction-% metric, not an exact count of what DeepSeek's API will actually bill.
+  Falls back to `len(text)//4` if `tiktoken` fails to import for any reason;
+  `cleaner.TOKEN_COUNT_METHOD` records which was used.
 
 - 2026-09-16 — `browser-use==0.13.10` pins its LLM-provider deps to **exact** versions
   (`anthropic==0.76.0`, `openai==2.26.0`, `python-dotenv==1.2.2`, `rich==14.3.3`), which

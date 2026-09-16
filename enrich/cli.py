@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,7 +34,7 @@ async def run_domain(
     *,
     domain_timeout_s: int,
     debug: bool,
-    debug_sink: dict[str, list] | None = None,
+    debug_sink: dict[str, dict[str, list]] | None = None,
 ) -> DomainResult:
     """Domain-level timeout wrapper around `pipeline.run_pipeline`. The pipeline itself
     already turns stage exceptions into a `failed` DomainResult (see pipeline.py); this
@@ -74,11 +75,11 @@ def _failed_result(domain: str, *, kind: str, message: str) -> DomainResult:
 
 async def run_all(
     domains: list[str], *, out: Path, domain_timeout_s: int, debug: bool
-) -> tuple[list[DomainResult], dict[str, list]]:
+) -> tuple[list[DomainResult], dict[str, dict[str, list]]]:
     settings = get_settings()
     semaphore = asyncio.Semaphore(settings.max_concurrent_domains)
     results: list[DomainResult] = []
-    debug_sink: dict[str, list] = {}
+    debug_sink: dict[str, dict[str, list]] = {}
 
     async def _one(domain: str) -> None:
         async with semaphore:
@@ -99,31 +100,58 @@ async def run_all(
     return results, debug_sink
 
 
+def _token_totals(result: DomainResult) -> tuple[int, int]:
+    raw = sum(p.raw_tokens for p in result.pages if p.raw_tokens is not None)
+    clean = sum(p.clean_tokens for p in result.pages if p.clean_tokens is not None)
+    return raw, clean
+
+
+def _reduction_pct(raw: int, clean: int) -> str:
+    if raw <= 0:
+        return "-"
+    return f"{(1 - clean / raw) * 100:.0f}%"
+
+
 def _print_summary(results: list[DomainResult], *, wall_time_s: float) -> None:
     """Per-domain rows, then a TOTAL row. Each domain's `duration` is that domain's own
     isolated wall-clock time (verified: an artificially slow 3s stub reports 3.0s, a 1s
     stub reports 1.0s, run concurrently) — it is not cumulative. The TOTAL row's time is
     the *run's* wall-clock time, not `sum(duration)`, precisely because domains overlap
     under `MAX_CONCURRENT_DOMAINS`; summing the column would double-count that overlap
-    and look like the exact "cumulative" artifact this table is trying to avoid."""
+    and look like the exact "cumulative" artifact this table is trying to avoid.
+
+    `raw tok`/`clean tok`/`reduction %` are cleaner.py's token counts (`raw` on the
+    original HTML, `clean` on the truncated markdown) — the evidence for the "no raw
+    HTML to the LLM" requirement (AGENTS.md #4)."""
     table = Table(title="Enrichment summary")
     for col in (
         "domain",
         "status",
         "confidence",
         "pages",
+        "raw tok",
+        "clean tok",
+        "reduction",
         "in tok",
         "out tok",
         "est $",
         "duration",
     ):
         table.add_column(col)
+
+    total_raw = total_clean = 0
     for i, r in enumerate(results):
+        raw, clean = _token_totals(r)
+        total_raw += raw
+        total_clean += clean
         table.add_row(
             r.domain,
             r.status,
             f"{r.confidence.score:.2f}",
             str(len(r.pages)),
+            str(raw),
+            str(clean),
+            _reduction_pct(raw, clean),
             str(r.usage.input_tokens),
             str(r.usage.output_tokens),
             f"${r.usage.est_cost_usd:.4f}",
@@ -135,6 +163,9 @@ def _print_summary(results: list[DomainResult], *, wall_time_s: float) -> None:
         "",
         "",
         str(sum(len(r.pages) for r in results)),
+        str(total_raw),
+        str(total_clean),
+        _reduction_pct(total_raw, total_clean),
         str(sum(r.usage.input_tokens for r in results)),
         str(sum(r.usage.output_tokens for r in results)),
         f"${sum(r.usage.est_cost_usd for r in results):.4f}",
@@ -163,7 +194,7 @@ def _print_debug_pages(results: list[DomainResult]) -> None:
 _AGGREGATE_REASON_PREFIXES = ("collection-child:", "collection-section-sitemap:")
 
 
-def _print_debug_candidates(debug_sink: dict[str, list]) -> None:
+def _print_debug_candidates(debug_sink: dict[str, dict[str, list]]) -> None:
     """Debug view: every URL discovery considered, not just the winners — selected,
     dropped, or skipped, each with a reason. See discovery-and-cleaning.md, "--debug
     candidate audit trail" (16 Sep, M1 review).
@@ -172,7 +203,8 @@ def _print_debug_candidates(debug_sink: dict[str, list]) -> None:
     (one row, with a count) rather than listed individually — a real site's sitemap can
     have thousands of blog/docs/changelog children, and a wall of near-identical rows
     would defeat the point of an *audit* view. Everything else is itemized."""
-    for domain, considered in debug_sink.items():
+    for domain, payload in debug_sink.items():
+        considered = payload.get("considered_links", [])
         aggregated: dict[str, int] = {}
         individual = []
         for c in considered:
@@ -201,6 +233,34 @@ def _print_debug_candidates(debug_sink: dict[str, list]) -> None:
                 style=row_style,
             )
         console.print(table)
+
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _slugify(url: str) -> str:
+    path = re.sub(r"^https?://[^/]+", "", url).strip("/")
+    slug = _SLUG_RE.sub("-", path.lower()).strip("-")
+    return slug or "home"
+
+
+def _write_debug_cleaned_pages(debug_sink: dict[str, dict[str, list]]) -> None:
+    """Writes `debug/<domain>/<kind>-<slug>.md` with each page's cleaned markdown."""
+    for domain, payload in debug_sink.items():
+        cleaned = payload.get("cleaned", [])
+        if not cleaned:
+            continue
+        domain_dir = Path("debug") / domain
+        domain_dir.mkdir(parents=True, exist_ok=True)
+        for page in cleaned:
+            path = domain_dir / f"{page.kind}-{_slugify(page.url)}.md"
+            path.write_text(
+                f"<!-- {page.url} — raw_tokens={page.raw_tokens} "
+                f"clean_tokens={page.clean_tokens} -->\n\n{page.markdown}"
+            )
+        console.print(
+            f"[dim]wrote {len(cleaned)} cleaned page(s) to {domain_dir}/[/dim]"
+        )
 
 
 @app.command()
@@ -241,6 +301,7 @@ def main(
     if debug:
         _print_debug_pages(results)
         _print_debug_candidates(debug_sink)
+        _write_debug_cleaned_pages(debug_sink)
     _print_summary(results, wall_time_s=wall_time_s)
 
 

@@ -5,7 +5,7 @@ bonus orchestrator (`graph.py` + `navigator.py`, M8/M9). See docs/ARCHITECTURE.m
 Nothing on this run path may import `graph` or `navigator` — that's the whole point of
 keeping the baseline and the bonus orchestrator decoupled.
 
-M1-M2 status: only `fetch_home -> discover_links -> fetch_subpages` run. `clean_pages`,
+M1-M2 status: `fetch_home -> discover_links -> fetch_subpages -> clean_pages` run.
 `extract`, `verify`, `search_linkedin`, `score` are TODOs, skipped entirely (not called,
 not stubbed-and-raising) so the run path never hits a `NotImplementedError`. Because no
 extraction has happened yet, `profile` is always `None`, so the real profile-based status
@@ -21,7 +21,7 @@ import time
 from datetime import UTC, datetime
 from typing import Literal
 
-from enrich import discovery, fetcher
+from enrich import cleaner, discovery, fetcher
 from enrich.config import Settings, get_settings
 from enrich.fetcher import FetchedPage
 from enrich.models import (
@@ -51,14 +51,17 @@ def _merge(state: DomainState, update: dict) -> None:
             state[key] = value  # type: ignore[literal-required]
 
 
-def _to_page_record(page: FetchedPage) -> PageRecord:
+def _to_page_record(
+    page: FetchedPage, cleaned_by_url: dict[str, cleaner.CleanPage]
+) -> PageRecord:
+    clean_page = cleaned_by_url.get(page.url)
     return PageRecord(
         url=page.url,
         kind=page.kind,
         status=page.status,
         http_status=page.http_status,
-        raw_tokens=None,  # TODO M2: cleaner.py fills this in
-        clean_tokens=None,  # TODO M2
+        raw_tokens=clean_page.raw_tokens if clean_page else None,
+        clean_tokens=clean_page.clean_tokens if clean_page else None,
         discovered_by=page.discovered_by,
     )
 
@@ -82,15 +85,15 @@ async def run_pipeline(
     settings: Settings | None = None,
     *,
     debug: bool = False,
-    debug_sink: dict[str, list] | None = None,
+    debug_sink: dict[str, dict[str, list]] | None = None,
 ) -> DomainResult:
     """Run the baseline stages for one domain. Never raises — any exception escaping a
     stage becomes a `failed` DomainResult with an `ErrorRecord(kind="internal")`; this
     is the domain-level last line of defence from docs/design-docs/resilience.md.
 
-    `debug_sink`, if given, is populated with `{domain: state["considered_links"]}` —
-    the discovery candidate audit trail — for `cli.py` to print separately, since that
-    data is diagnostic-only and never part of the returned `DomainResult`."""
+    `debug_sink`, if given, is populated with `debug_sink[domain] = {"considered_links":
+    [...], "cleaned": [...]}` — diagnostic data `cli.py` prints/writes separately under
+    `--debug`, since none of it belongs in the returned `DomainResult`."""
     settings = settings or get_settings()
     started = time.monotonic()
     state: DomainState = {"domain": domain, "started_at": started}
@@ -101,14 +104,17 @@ async def run_pipeline(
 
         if home is not None and home.status == "ok":
             _merge(state, await discovery.discover_links(state))
-            if debug_sink is not None:
-                debug_sink[domain] = state.get("considered_links", [])
             # TODO M9 (bonus): agentic_navigate fallback when discovery comes back thin.
             _merge(state, await fetcher.fetch_subpages(state))
+            _merge(state, await cleaner.clean_pages(state))
+            if debug_sink is not None:
+                debug_sink[domain] = {
+                    "considered_links": state.get("considered_links", []),
+                    "cleaned": state.get("cleaned", []),
+                }
         # else: hard fetch_home failure — skip straight to finalize, don't call the LLM
         # on nothing (docs/ARCHITECTURE.md, route_after_fetch_home).
 
-        # TODO M2: clean_pages
         # TODO M3: extract, verify
         # TODO M7 (bonus): search_linkedin
         # TODO M4: score
@@ -126,7 +132,8 @@ async def run_pipeline(
             },
         )
 
-    pages = [_to_page_record(p) for p in state.get("pages", [])]
+    cleaned_by_url = {c.url: c for c in state.get("cleaned", [])}
+    pages = [_to_page_record(p, cleaned_by_url) for p in state.get("pages", [])]
 
     return DomainResult(
         domain=domain,

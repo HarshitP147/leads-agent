@@ -41,10 +41,14 @@ for the 16 Sep re-sequencing and why LangGraph/Browser Use moved from "day 1 spi
       unbounded) — see Progress Log for the full M1-review write-up
 
 ### M2 · Clean (assignment step 2)
-- [ ] `cleaner.py` with fallback + token counts (raw vs clean); TEAM CARDS extraction
-- [ ] Wire `clean_pages` into `pipeline.py` (still status `failed` — no extraction yet)
-- [ ] `--debug` writes cleaned markdown; eyeball all 3 domains
-- [ ] Tests: discovery, cleaner, emails, bot_wall
+- [x] `cleaner.py` with fallback + token counts (raw vs clean); TEAM CARDS extraction
+- [x] Wire `clean_pages` into `pipeline.py` (status now `ok`/`partial`/`failed` via the
+      M1 interim fetch-health rule — extraction still doesn't exist, that's M3)
+- [x] `--debug` writes cleaned markdown (`debug/<domain>/<kind>-<slug>.md`); eyeballed
+      all 3 domains
+- [x] Tests: `test_cleaner.py`, `test_emails.py` (`test_discovery.py` already existed
+      from the M1 review pass) — `test_bot_wall.py` still outstanding, not part of this
+      pass's instructions
 
 ## Day 2 — 17 Sep
 
@@ -399,3 +403,73 @@ and `resilience.md`'s Profiling section (field names changed:
 `networkidle=`/`timeout=` → `settle=`/`exit=`) to match. Logged the deferred
 concurrent-subpage-fetch idea in `tech-debt.md` with these same numbers, per
 instruction. `ruff check`/`format`: clean.
+
+2026-09-16 — M2: cleaner.py, wired into pipeline.py — Built `cleaner.py` per
+discovery-and-cleaning.md's Cleaning section: strip
+script/style/noscript/svg/canvas/iframe/form/header/nav/footer + `[aria-hidden=true]` +
+cookie banners (class/id substring match), `trafilatura.extract(...,
+output_format="markdown", include_links=True, favor_recall=True)` with a
+`soup.get_text("\n")` fallback under 200 chars, collapse-blank-lines +
+cross-page-line-dedup (first occurrence wins, in kind-priority order:
+leadership/team/about first — same list used for both the dedup order and the final
+`cleaned` list order), per-page truncation to `MAX_CHARS_PER_PAGE` with a
+`[...truncated...]` marker. Email/LinkedIn harvesting needed no new code — it already
+runs on raw HTML in `fetcher.py`/`discovery.py`, well before this node exists in the
+pipeline, so the doc's "keep footer text only for extracting emails/links" exception is
+satisfied by *ordering*, not by anything cleaner.py does.
+
+**Token counts.** `tiktoken` was already a transitive dependency (via
+`langchain-openai`); added it to `requirements.txt` explicitly since we now import it
+directly. Uses `cl100k_base` — OpenAI's encoding, not DeepSeek's (no public
+`tiktoken`-compatible DeepSeek encoding exists), so `raw_tokens`/`clean_tokens` are a
+consistent approximation for the reduction-% metric, not what DeepSeek will actually
+bill. Falls back to `len(text)//4` if `tiktoken` ever fails to import;
+`cleaner.TOKEN_COUNT_METHOD` records which one ran.
+
+**TEAM CARDS.** `_extract_team_cards` runs on the un-stripped soup (before
+`_strip_boilerplate`) for `team`/`leadership`-kind pages only: h3/h4 heading as the
+name, first short (≤80 char) sibling text within 3 hops as the role, first
+`linkedin.com/in/` href found nearby. Added `team_cards: list[TeamCard]` to
+`DomainState` (and to schemas.md — a real addition, not diagnostic-only, since `extract`
+in M3 will actually consume it as its own prompt block).
+
+**Debug output.** `cli.py`'s `debug_sink` shape changed from a flat
+`dict[str, list]` (M1 review's `considered_links` only) to `dict[str, dict[str, list]]`
+so it can carry both `considered_links` and `cleaned` per domain — the cleaned markdown
+never touches `DomainResult` (disk-facing, no raw/cleaned content by design), so this
+is the only path from `state["cleaned"]` to anything `cli.py` can act on. `--debug`
+writes `debug/<domain>/<kind>-<slug>.md`, each with a one-line HTML comment header
+(`raw_tokens=`/`clean_tokens=`) then the markdown. `pipeline._to_page_record` now looks
+up each page's `CleanPage` by URL to fill `PageRecord.raw_tokens`/`clean_tokens`
+(previously always `None`, TODO M2).
+
+**Summary table.** Added `raw tok` / `clean tok` / `reduction` columns (per domain +
+TOTAL), computed by summing `PageRecord.raw_tokens`/`clean_tokens` across a domain's
+pages.
+
+**Verification** (`python -m enrich postman.com supabase.com vapi.ai --debug`):
+
+| domain | status | pages | raw tok | clean tok | reduction |
+|---|---|---|---|---|---|
+| postman.com | ok | 7 | 842,785 | 6,260 | 99% |
+| supabase.com | ok | 7 | 1,259,048 | 5,407 | 100% |
+| vapi.ai | ok | 7 | 1,186,861 | 2,818 | 100% |
+| **TOTAL** | | 21 | 3,288,694 | 14,485 | **100%** |
+
+All 3 `ok` (home + subpage fetched, per M1's interim status rule — no extraction yet).
+`debug/<domain>/` populated for all three (spot-checked `postman.com/home-home.md`:
+100,150 raw tokens → 73 clean tokens, and the content is exactly what the homepage
+visibly says, nothing else; `postman.com/pricing-pricing.md` correctly hits the
+`MAX_CHARS_PER_PAGE` cap and ends with `[...truncated...]`). The reduction-% numbers
+look almost suspiciously perfect (99-100%) but that's genuinely what "modern SPA
+homepage ships a 300KB+ JS bundle as `raw` HTML, renders a two-sentence hero" looks like
+in tokens — this is the concrete evidence for AGENTS.md rule 4 ("No raw HTML to the LLM.
+Ever."). `--debug`'s candidates-considered tables stayed reasonable on real sites too
+(131/85/~120 rows for supabase/vapi/postman respectively — homepage link counts, not an
+explosion) after the M1-review aggregation fix. Added `tests/test_cleaner.py` (6 tests:
+script/svg/nav removal, card-grid fallback, token-count shrink, skip-non-ok-pages,
+team-card extraction, team-cards-only-for-team/leadership-kind) and
+`tests/test_emails.py` (6 tests — first pass used `example.com` as both the test
+domain *and* the email domain, which collided with `EMAIL_JUNK_SUBSTRINGS`'s own
+literal-placeholder-domain check and failed 4/6 tests; switched to `acme-corp.io`).
+Full suite: 22 passed. `ruff check`/`format`: clean on `enrich/`+`tests/`.
