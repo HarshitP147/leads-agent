@@ -13,7 +13,7 @@ partial update, specifically so `graph.py` can wire the *same* functions into a
 ```
 CLI (cli.py)
   └─ run_all(domains)                     asyncio.gather with Semaphore(MAX_CONCURRENT_DOMAINS)
-       └─ per domain: pipeline.run_domain(DomainState)   ← plain async function, one state per domain
+       └─ per domain: pipeline.run_pipeline(domain, settings)   ← plain async function, one state per domain
             └─ DomainResult  →  output.json + summary table (rich)
 ```
 
@@ -28,21 +28,26 @@ defence; stages should already have handled their own errors.
 Plain sequential `await`s, no graph engine:
 
 ```
-async def run_domain(state: DomainState) -> DomainState:
-    state |= await fetch_home(state)
+async def run_pipeline(domain: str, settings: Settings) -> DomainResult:
+    state = {"domain": domain}
+    _merge(state, await fetch_home(state))
     if is_hard_failure(state):            # DNS error, non-2xx after retries, bot wall
-        return state | await score(state) | await finalize(state)   # never call the LLM on nothing
-    state |= await discover_links(state)
-    state |= await fetch_subpages(state)
-    state |= await clean_pages(state)
-    state |= await extract(state)
-    state |= await verify(state)
-    state |= await score(state)
-    return state | await finalize(state)
+        return finalize(state)            # never call the LLM on nothing
+    _merge(state, await discover_links(state))
+    _merge(state, await fetch_subpages(state))
+    _merge(state, await clean_pages(state))
+    _merge(state, await extract(state))
+    _merge(state, await verify(state))
+    _merge(state, await score(state))
+    return finalize(state)
 ```
 
-(Illustrative — the real function threads partial-update dicts through, same merge
-semantics `StateGraph` would apply, so porting to M8 is mechanical.) No `agentic_navigate`
+`_merge` applies a stage's partial-update dict in place, concatenating the three
+additive-reducer fields (`errors`, `usage_events`, `route_log`) and overwriting
+everything else — the same merge semantics `StateGraph` applies automatically, done by
+hand since there's no graph engine in the baseline. This is exactly what `pipeline.py`
+does (implemented in M1, extended stage-by-stage through M2–M4); porting to M8 later is
+mechanical because the stage functions themselves never change. No `agentic_navigate`
 or `search_linkedin` calls in the baseline: those only exist once M9/M7 land.
 
 ## Bonus orchestration (M8+): LangGraph pipeline
@@ -102,12 +107,12 @@ pipeline doesn't strictly need it, so `state.py` doesn't change shape between M5
 | `extractor.py` | Build prompt from cleaned pages; structured LLM call (DeepSeek); usage capture. |
 | `verify.py` | Name/email/LinkedIn grounding checks. |
 | `scoring.py` | Deterministic confidence formula. |
-| `pipeline.py` | **(M1–M5, baseline)** Sequential async orchestrator: calls each stage in order, applies partial updates, builds the final `DomainResult` in `finalize`. |
+| `pipeline.py` | **(M1–M5, baseline)** `run_pipeline(domain, settings)`: sequential async orchestrator, calls each stage in order, applies partial updates, builds the final `DomainResult`. Started in M1 (fetch+discover only); extended through M2–M4. |
 | `search.py` | **(bonus, M7)** Tavily LinkedIn lookups with result validation. |
 | `cost.py` | **(bonus, M6)** Usage events → tokens + USD per domain; pricing table. |
 | `graph.py` | **(bonus, M8)** Compiles `pipeline.py`'s stage functions into a `StateGraph` + routing functions. Stub until then. |
 | `navigator.py` | **(bonus, M9)** Browser Use fallback; returns extra URLs only (never final data). Stub until then. |
-| `cli.py` | Typer CLI, concurrency, writing outputs, summary table. Calls `pipeline.run_domain` until M8, then `graph.ainvoke`. |
+| `cli.py` | Typer CLI, concurrency, writing outputs, summary table. Calls `pipeline.run_pipeline` (wired in M1) until M8, then `graph.ainvoke`. |
 
 Dependency direction: `cli → pipeline (or, post-M8, graph) → stages(modules) →
 models/state/config`. Modules never import `pipeline`, `graph`, or `cli`.

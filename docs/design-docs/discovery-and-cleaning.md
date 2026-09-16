@@ -58,9 +58,59 @@ product-marketing sites that sell "X management" features (vapi.ai's own
 the M1 smoke test — all 6 picked slots were junk). Only compound, unambiguous forms
 (`management-team`, `leadership-team`, ...) are kept.
 
-Penalise: `/blog/`, `/docs/`, `/changelog`, `/legal`, `/terms`, `/privacy`, language
-prefixes (`/de/`, `/ja/`), query strings, file extensions (`.pdf`, `.png`).
-Pick best-scoring URL per kind, then fill remaining slots by score. Dedupe by normalised path.
+Penalise (score discount, still a candidate): `/legal`, `/terms`, `/privacy`, query
+strings. Pick best-scoring URL per kind, then fill remaining slots by score. Dedupe by
+normalised path.
+
+### Collection sections — drop children, keep the index as filler (16 Sep, M1 review)
+
+`COLLECTION_SECTIONS` (a constant in `discovery.py`): `blog`, `docs`, `changelog`,
+`news`, `press`, `customers`, `careers`, `jobs`, `guides`, `tutorials`, `resources`,
+`learn`, `events`. These are index sections whose *children* are content items, not
+company-info pages — a blog post or a customer case study is not a "company" or "about"
+page even if a stray keyword collides (this generalises the M1 smoke-test fix where
+`"story"` matched supabase.com's "Read the story →" customer-card CTAs).
+
+Rule, applied **before scoring**, to every source (sitemap, anchors, later the Browser
+Use agent too):
+- Take the URL's path segments; if the first segment is a 2-letter (or 2-letter-2-letter)
+  locale code (`/en/...`, `/en-us/...`), skip it and use the *next* segment instead —
+  `/en/blog/x` counts as a `blog` child, not an `en` anything.
+- If that (locale-adjusted) first segment is in `COLLECTION_SECTIONS` **and** the path
+  has more than one segment after it (i.e. it's a child, not the section root) → **drop
+  the URL entirely**, before it ever reaches keyword scoring. Not a penalty, not a low
+  score — it never becomes a candidate.
+- If the path is *exactly* the section root (`/blog`, `/en/docs`) → keep it as a
+  candidate, but only as `kind="other"` at a fixed low score (0.5) — filler for when
+  nothing better exists, never able to outrank a real about/team/pricing/contact hit
+  (the lowest real kind score is `pricing`/`contact` at weight 2.0, and even a
+  worst-case-discounted single-word match rarely drops below 0.5, so this only wins an
+  otherwise-empty slot).
+
+Sitemap indexes get the same treatment one level up: a **child sitemap** (e.g.
+`/docs/sitemap.xml`, `/sitemap-blog.xml`) whose URL contains a collection-section word is
+never fetched at all — Postman's and Supabase's sitemaps are dominated by
+docs/blog/customer-story children, and walking those sitemaps just to filter every URL
+back out afterward wastes the one HTTP round-trip per child that the depth-1 cap
+(`max 3 child sitemaps`) is trying to keep cheap. `--debug` logs each skipped child
+sitemap with its reason.
+
+### `--debug` candidate audit trail
+
+Every URL discovery looks at — not just the ones that made the final cut — is worth
+seeing when tuning the scorer. `discover_links` returns a full list of considered links
+(url, kind, score, source, decision: `selected` / `dropped` / `skipped`, and a reason for
+anything not selected). `cli.py` prints this as a table per domain under `--debug`, right
+alongside the pages-picked table.
+
+`discovery.py` deliberately does **not** record a per-URL reason for every generic drop
+(off-site, blocked-extension, too-deep, unclassified) coming out of a sitemap — a real
+sitemap can list thousands of URLs, and auditing all of them would turn `--debug` into a
+sitemap dump. Only the sitemap loop's collection-child drops are recorded (that's what
+this rule is about), and `cli.py` aggregates *those* by reason into one row with a count
+(e.g. `collection-child:/blog (1203 URLs)`) rather than listing each one — vercel.com's
+real sitemap has 4000+ such children. Anchor-derived candidates (bounded to one
+homepage's links) are still itemized individually; that volume is small enough to read.
 
 Also collect from **every** fetched page (not just home):
 - `mailto:` hrefs and regex emails → `candidate_emails` (with `source_url`);

@@ -8,10 +8,11 @@ Goal: the run always finishes and always writes `output.json`, even if every dom
    transient errors, 429 `Retry-After`, bot-wall detection + one reload.
 2. **Stage level**: every stage catches exceptions and appends `ErrorRecord`; returns a
    safe partial update (empty lists, `None`).
-3. **Domain level** (`cli.py`): `asyncio.wait_for(pipeline.run_domain(...),
-   DOMAIN_TIMEOUT=240s)` inside try/except → on anything escaping, build a `failed`
-   `DomainResult` from whatever state is available. (Becomes `graph.ainvoke(...)` once
-   the M8 LangGraph bonus lands — same wrapper, same contract.)
+3. **Domain level** (`cli.py`): `asyncio.wait_for(pipeline.run_pipeline(...),
+   DOMAIN_TIMEOUT=240s)` inside try/except → on anything escaping (in practice, only a
+   timeout — `run_pipeline` already turns its own stage exceptions into a `failed`
+   `DomainResult` rather than raising), build a `failed` `DomainResult`. (Becomes
+   `graph.ainvoke(...)` once the M8 LangGraph bonus lands — same wrapper, same contract.)
 4. **Run level**: `asyncio.gather(..., return_exceptions=True)`; results written
    incrementally (rewrite `output.json` after each domain completes) so a Ctrl-C still
    leaves useful output. Browser closed in `finally`.

@@ -26,19 +26,33 @@ for the 16 Sep re-sequencing and why LangGraph/Browser Use moved from "day 1 spi
 - [x] `discovery.py`: robots/sitemap via httpx; anchor scoring; guesses; page cap
 - [x] Email + LinkedIn link harvesting from every page
 - [x] Smoke: fetch + discover for the 3 domains, print status/title/len + discovered URLs
+- [x] `pipeline.py` created (partial): `run_pipeline(domain, settings) -> DomainResult`
+      running `fetch_home → discover_links → fetch_subpages` only; later stages are
+      `# TODO` comments, not stubs that raise — the run path must stay exception-free
+- [x] `cli.py` rewired to call `pipeline.run_pipeline`; `graph`/`navigator` are no longer
+      imported anywhere on the run path
+- [x] `--debug` prints a rich table of pages picked (url, kind, discovered_by, status,
+      http_status) per domain
+- [x] `tests/test_pipeline_smoke.py`: stubs the fetcher, asserts `run_pipeline` returns a
+      `DomainResult` without raising (happy path + a stage that raises)
+- [x] Collection sections (blog/docs/changelog/... children dropped, index kept as
+      filler) + `tests/test_discovery.py`; interim fetch-health status rule; `--max-pages`
+      flag; `--debug` candidate-considered audit table (aggregated where volume is
+      unbounded) — see Progress Log for the full M1-review write-up
 
 ### M2 · Clean (assignment step 2)
 - [ ] `cleaner.py` with fallback + token counts (raw vs clean); TEAM CARDS extraction
+- [ ] Wire `clean_pages` into `pipeline.py` (still status `failed` — no extraction yet)
 - [ ] `--debug` writes cleaned markdown; eyeball all 3 domains
 - [ ] Tests: discovery, cleaner, emails, bot_wall
 
 ## Day 2 — 17 Sep
 
 ### M3 · Extraction (DeepSeek) + verification + confidence (assignment step 3)
-- [ ] `pipeline.py`: plain async `fetch → discover → clean → extract → verify → score →
-      finalize`, each stage a small function that catches its own errors and appends
-      `ErrorRecord`s. Keep stage signatures `async def stage(state) -> dict` so they can
-      become LangGraph nodes unchanged in M8.
+- [ ] Extend `pipeline.py` (created partial in M1) with `extract → verify → score →
+      finalize`, once `clean_pages` lands in M2. Each stage stays a small function that
+      catches its own errors and appends `ErrorRecord`s; signatures stay
+      `async def stage(state) -> dict` so they can become LangGraph nodes unchanged in M8.
 - [ ] `extractor.py`: `ChatDeepSeek` (`langchain-deepseek`), `with_structured_output(
       LLMExtraction, method="function_calling", include_raw=True)`; on `parsing_error` one
       repair retry, then fall back to `method="json_mode"` +
@@ -162,3 +176,99 @@ and added a footnote explaining why. Also fixed a duplicate-email bug in
 deduped across pages, only within a single page's regex pass) — now dedupes globally by
 lowercased address/URL every time a page's harvest is merged in. Not committed yet —
 leaving that for an explicit request per policy.
+
+2026-09-16 — M1 (follow-up) — Found and fixed a real gap: docs described `pipeline.py`
++ `cli.py` wired to it, but only the docs had been updated — `cli.py` still called
+`graph.build_graph().ainvoke(...)`, which fails immediately since every graph node body
+is `raise NotImplementedError` (M0 scaffolding, never meant to be the real run path).
+Created `enrich/pipeline.py` with `run_pipeline(domain, settings, *, debug=False) ->
+DomainResult`, running only `fetch_home → discover_links → fetch_subpages` for M1; the
+remaining stages are `# TODO` comments, not stub calls, so the run path never raises
+`NotImplementedError` — `status` is unconditionally `"failed"` at this milestone because
+`profile` is always `None` (correct per the schemas.md status rule, not a bug: M1 has no
+extraction yet, so judge it by the `--debug` pages table, not by `status`). Since
+`pipeline.py` isn't a graph engine, it can't rely on LangGraph's automatic reducer
+merging for `state.py`'s `Annotated[list, operator.add]` fields — added a small `_merge`
+helper that concatenates `errors`/`usage_events`/`route_log` and overwrites everything
+else, which is exactly the "pay once in M0, port mechanically in M8" trade `state.py`'s
+design banked on. Rewired `cli.py`'s `run_domain` to wrap
+`asyncio.wait_for(pipeline.run_pipeline(...), domain_timeout_s)` instead of building a
+graph; confirmed by import-checking that `enrich.graph`/`enrich.navigator` never load
+when only `enrich.cli`/`enrich.pipeline` are imported. Fixed a real UX bug found while
+verifying `--debug`: `configure_logging(debug=True)` was setting the *root* logger to
+DEBUG, which made httpx/httpcore/asyncio dump full wire-level traffic — now only
+`enrich`'s own loggers go to DEBUG; `httpx`/`httpcore`/`asyncio`/`playwright` are pinned
+to WARNING regardless. Added a `--debug` rich table of pages picked per domain, and
+`tests/test_pipeline_smoke.py` (stubs the fetcher via `monkeypatch`, no network) covering
+the happy path and a stage that raises. Updated `ARCHITECTURE.md`'s pseudocode and
+`resilience.md` to say `run_pipeline`, not the `run_domain` name I'd used loosely before
+(the function is real now, so the name needed to be exact). Verified live:
+`python -m enrich vercel.com --debug` (7 pages, clean table), `python -m enrich
+postman.com supabase.com vapi.ai --debug` (3 domains concurrently, 7 pages each, no
+crash), `python -m enrich example.invalid` (`dns_error` recorded on both the bare and
+`www.` candidate, exit 0, valid `output.json`), `pytest -q` (2 passed). `ruff
+check`/`format` clean on `enrich/`+`tests/`. Not committed.
+
+2026-09-16 — M1 review fixes (A–E) — Updated `discovery-and-cleaning.md` first, then
+code, per instructions.
+
+**A. Collection sections.** Added `COLLECTION_SECTIONS` (blog/docs/changelog/news/press/
+customers/careers/jobs/guides/tutorials/resources/learn/events) to `discovery.py`. A URL
+whose (locale-adjusted) first segment is in that set and has depth > 1 is dropped before
+scoring, from both sitemap and anchor sources; the bare index (`/blog`) survives as a
+`kind="other"`, `score=0.5` filler — but only when no real keyword already classified it
+(so `/careers` still scores as a real `company` hit; the filler is a fallback, not an
+override). Child sitemaps whose URL itself names a collection section
+(`/docs/sitemap.xml`) are never fetched — confirmed live: `skipped child sitemap
+https://supabase.com/docs/sitemap.xml (section=docs)`. `tests/test_discovery.py` (new,
+6 tests, no network) covers exactly the four cases asked for plus the locale-prefix and
+ordinary-page paths.
+
+**B. Interim status rule.** `pipeline._interim_status`: `failed` if home didn't fetch,
+`ok` if home + ≥1 subpage fetched, `partial` if only home. Documented as a `# TODO M3`
+stand-in in `schemas.md` next to the real rule it will replace. Existing pipeline tests
+updated (one now asserts `ok`, one asserts `partial`) since the old tests only made sense
+against the previous "always failed" placeholder.
+
+**C. Logging.** Flipped from last session's fix: `httpx`/`httpcore` are now WARNING
+*unless* `--debug` (previously I'd quieted them even under `--debug`, which fought this
+task's explicit spec). Verified: default runs show no wire noise; `--debug` shows it
+(confirmed: 99 httpcore/asyncio DEBUG lines in one 3-domain `--debug` run).
+
+**D. `--debug` candidate audit.** `discover_links` now returns `considered_links`
+(diagnostic-only — not in `state.py`'s documented schema, never reaches `DomainResult`),
+threaded through `pipeline.run_pipeline`'s new `debug_sink` param to `cli.py` for
+printing, since the data doesn't survive past `run_pipeline`'s return otherwise. Hit a
+real scale problem building this: printing a "considered" row per raw sitemap URL means
+per-site volume, not a bounded audit — vercel.com's sitemap alone produced 4305
+collection-child drops (1979 `/docs` children, 1509 `/changelog`, ...) and the sitemap
+loop's other generic drops (unclassified/off-site/depth>2) would have been just as bad
+on top. Fixed in two places: `discovery.py`'s sitemap loop only records the
+collection-child reason (the one this task is actually about) per URL, not the generic
+ones; `cli.py`'s printer aggregates collection-child/collection-section-sitemap entries
+into one row per reason with a count, and only itemizes individually where volume is
+naturally bounded (anchor-derived candidates — a homepage's own links, at most dozens).
+Confirmed both scale fixes: total output for the 3-domain `--debug` run dropped from
+5510 lines with individual per-URL rows to 493 lines with aggregation.
+
+**E. `--max-pages`.** New CLI flag sets `os.environ["MAX_PAGES_PER_DOMAIN"]` before the
+first `get_settings()` call — every stage already calls `get_settings()` independently
+rather than receiving a shared instance, so an env-var override is the one mechanism that
+reaches all of them without threading a new parameter through every stage signature.
+Verified: `--max-pages 2` on vercel.com produced exactly 3 pages (home + 2).
+
+**Verification run** (`python -m enrich vercel.com supabase.com harshit147.dev --debug`):
+all 3 domains status `ok` (home + subpage fetched — rule B), 7 pages each, candidate
+tables show real about/pricing/company/contact hits selected and collection-section
+noise correctly aggregated away. `pytest -q`: 9 passed. `ruff check`/`format`: clean.
+
+**Aside, not part of A–E:** stress-testing `example.invalid` repeatedly in quick
+succession (rapid-fire headless Chromium launches while debugging D) triggered an
+intermittent multi-minute hang inside `fetcher._fetch_one` that I could not reproduce in
+isolation on a clean run — `_goto_with_retries` and `page.close()` were independently
+fast (4s, 0.01s) every time I tested them alone, and a cooldown before retrying
+`_fetch_one` as a whole made it fast again too (4.5s). Reads as sandbox/resource
+flakiness from launching Chromium many times in a short window, not a logic bug — but
+noting it here since a hang that eventually self-heals via `DOMAIN_TIMEOUT_S` (240s) is
+still a bad experience if it recurs. Nothing changed in `fetcher.py` this session; worth
+a closer look in M4 if it resurfaces.

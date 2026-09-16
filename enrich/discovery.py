@@ -57,7 +57,33 @@ GUESS_PATHS: dict[Kind, str] = {
     "contact": "/contact",
     "pricing": "/pricing",
 }
-PENALTY_SUBSTRINGS = ("/blog/", "/docs/", "/changelog", "/legal", "/terms", "/privacy")
+
+# Content-collection index sections: their *children* are blog posts / docs pages /
+# customer stories / job listings, not company-info pages, even when a stray keyword
+# collides (e.g. "story" inside a customer-story CTA, "careers" inside a job posting
+# under /careers/). See discovery-and-cleaning.md, "Collection sections" (16 Sep, M1
+# review). The index itself (bare "/blog") is kept as low-score filler, not dropped.
+COLLECTION_SECTIONS = frozenset(
+    {
+        "blog",
+        "docs",
+        "changelog",
+        "news",
+        "press",
+        "customers",
+        "careers",
+        "jobs",
+        "guides",
+        "tutorials",
+        "resources",
+        "learn",
+        "events",
+    }
+)
+COLLECTION_INDEX_SCORE = 0.5
+LOCALE_SEGMENT_RE = re.compile(r"^[a-z]{2}(-[a-z]{2})?$")
+
+PENALTY_SUBSTRINGS = ("/legal", "/terms", "/privacy")
 LANG_PREFIX_RE = re.compile(r"^/[a-z]{2}(-[a-z]{2})?/")
 BLOCKED_EXTENSIONS = (
     ".pdf",
@@ -89,6 +115,18 @@ class CandidateLink(BaseModel):
     score: float
     discovered_by: Literal["sitemap", "anchor", "guess"]
     anchor_text: str | None = None
+
+
+class ConsideredLink(BaseModel):
+    """Debug audit trail: every URL discovery looked at, not just the winners.
+    See discovery-and-cleaning.md, "--debug candidate audit trail"."""
+
+    url: str
+    kind: Kind | Literal["other"] | None = None
+    score: float | None = None
+    source: Literal["sitemap", "anchor", "guess"]
+    decision: Literal["selected", "dropped", "skipped"]
+    reason: str | None = None
 
 
 class FoundEmail(BaseModel):
@@ -135,6 +173,33 @@ def _path_depth(path: str) -> int:
     return len([seg for seg in path.split("/") if seg])
 
 
+def _locale_adjusted_segments(path: str) -> list[str]:
+    """Strip a leading locale segment (`/en/`, `/en-us/`) so `/en/blog/x` counts as a
+    `blog` child, not an `en` anything."""
+    segments = [seg for seg in path.split("/") if seg]
+    if segments and LOCALE_SEGMENT_RE.match(segments[0].lower()):
+        return segments[1:]
+    return segments
+
+
+def _collection_child_reason(path: str) -> str | None:
+    """Non-None if `path` is a *child* of a collection section (dropped before scoring,
+    from every source)."""
+    segments = _locale_adjusted_segments(path)
+    if len(segments) > 1 and segments[0].lower() in COLLECTION_SECTIONS:
+        return f"collection-child:/{segments[0].lower()}"
+    return None
+
+
+def _collection_index_kind(path: str) -> Kind | Literal["other"] | None:
+    """ "other" if `path` is exactly a collection-section root (`/blog`, `/en/docs`) —
+    kept as low-score filler, never a drop."""
+    segments = _locale_adjusted_segments(path)
+    if len(segments) == 1 and segments[0].lower() in COLLECTION_SECTIONS:
+        return "other"
+    return None
+
+
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
@@ -176,7 +241,9 @@ def _keyword_score(
     return max(candidates) if candidates else None
 
 
-def _classify(path: str, anchor_text: str) -> tuple[Kind, float] | None:
+def _classify(
+    path: str, anchor_text: str
+) -> tuple[Kind | Literal["other"], float] | None:
     path_lower = path.lower()
     path_tokens = _tokenize(path)
     anchor_tokens = _tokenize(anchor_text)
@@ -199,8 +266,15 @@ def _classify(path: str, anchor_text: str) -> tuple[Kind, float] | None:
         kind_score = max((s for s in scores if s is not None), default=None)
         if kind_score is not None and (best is None or kind_score > best[1]):
             best = (kind, kind_score)
+
     if best is None:
+        # No real kind matched — fall back to the low-score collection-index filler
+        # (e.g. bare "/blog") rather than dropping the URL outright.
+        index_kind = _collection_index_kind(path)
+        if index_kind is not None:
+            return index_kind, COLLECTION_INDEX_SCORE
         return None
+
     kind, weight = best
     penalty = 0.0
     if any(sub in path.lower() for sub in PENALTY_SUBSTRINGS):
@@ -229,8 +303,20 @@ async def _fetch_text(client: httpx.AsyncClient, url: str) -> str | None:
     return None
 
 
+def _sitemap_collection_hit(sitemap_url: str) -> str | None:
+    """Non-None (the matched section) if a child sitemap's URL is itself about a
+    collection section (e.g. "/docs/sitemap.xml", "/sitemap-blog.xml") — walking it just
+    to filter every URL back out afterward isn't worth the round-trip."""
+    tokens = _tokenize(urlparse(sitemap_url).path)
+    return next((section for section in COLLECTION_SECTIONS if section in tokens), None)
+
+
 async def _sitemap_urls_from(
-    client: httpx.AsyncClient, sitemap_url: str, *, depth: int
+    client: httpx.AsyncClient,
+    sitemap_url: str,
+    *,
+    depth: int,
+    skipped: list[ConsideredLink],
 ) -> list[str]:
     text = await _fetch_text(client, sitemap_url)
     if not text:
@@ -252,7 +338,23 @@ async def _sitemap_urls_from(
             if _strip_ns(loc.tag) == "loc" and loc.text
         ][:3]
         for child_url in child_sitemaps:
-            urls.extend(await _sitemap_urls_from(client, child_url, depth=depth + 1))
+            hit = _sitemap_collection_hit(child_url)
+            if hit is not None:
+                skipped.append(
+                    ConsideredLink(
+                        url=child_url,
+                        source="sitemap",
+                        decision="skipped",
+                        reason=f"collection-section-sitemap:{hit}",
+                    )
+                )
+                logger.debug("skipped child sitemap %s (section=%s)", child_url, hit)
+                continue
+            urls.extend(
+                await _sitemap_urls_from(
+                    client, child_url, depth=depth + 1, skipped=skipped
+                )
+            )
         return urls
 
     if root_tag == "urlset":
@@ -265,10 +367,17 @@ async def _sitemap_urls_from(
     return urls
 
 
+def _drop(
+    url: str, *, source: Literal["sitemap", "anchor", "guess"], reason: str
+) -> ConsideredLink:
+    return ConsideredLink(url=url, source=source, decision="dropped", reason=reason)
+
+
 async def _discover_sitemap_candidates(
     base_url: str, domain: str
-) -> tuple[list[CandidateLink], ErrorRecord | None]:
+) -> tuple[list[CandidateLink], list[ConsideredLink], ErrorRecord | None]:
     candidates: list[CandidateLink] = []
+    considered: list[ConsideredLink] = []
     try:
         async with httpx.AsyncClient(
             headers={"User-Agent": "enrich-agent/0.1"}
@@ -284,16 +393,32 @@ async def _discover_sitemap_candidates(
 
             all_urls: list[str] = []
             for sitemap_url in sitemap_urls[:3]:
-                all_urls.extend(await _sitemap_urls_from(client, sitemap_url, depth=0))
+                all_urls.extend(
+                    await _sitemap_urls_from(
+                        client, sitemap_url, depth=0, skipped=considered
+                    )
+                )
 
             for url in all_urls:
-                if not _same_site(url, domain) or _has_blocked_extension(
-                    urlparse(url).path
-                ):
+                # A real sitemap can list thousands of URLs — auditing every generic
+                # drop (off-site / blocked-ext / too-deep / unclassified) here would
+                # turn the --debug table into a sitemap dump, not a reviewable audit
+                # trail. Only the collection-child drop (what this rule is actually
+                # about) is worth recording per-URL at this volume; the classified
+                # pool (selected/not-selected) is recorded once, after selection, in
+                # discover_links.
+                path = urlparse(url).path
+                child_reason = _collection_child_reason(path)
+                if child_reason is not None:
+                    considered.append(_drop(url, source="sitemap", reason=child_reason))
                     continue
-                if _path_depth(urlparse(url).path) > 2:
+                if not _same_site(url, domain):
                     continue
-                classified = _classify(urlparse(url).path, "")
+                if _has_blocked_extension(path):
+                    continue
+                if _path_depth(path) > 2:
+                    continue
+                classified = _classify(path, "")
                 if classified is None:
                     continue
                 kind, score = classified
@@ -308,10 +433,12 @@ async def _discover_sitemap_candidates(
                     )
                 )
     except httpx.HTTPError as exc:
-        return candidates, ErrorRecord(
-            stage="discover_links", kind="sitemap_error", message=str(exc)
+        return (
+            candidates,
+            considered,
+            ErrorRecord(stage="discover_links", kind="sitemap_error", message=str(exc)),
         )
-    return candidates, None
+    return candidates, considered, None
 
 
 # --- Anchor scoring (from the fetched homepage HTML) ---------------------------------
@@ -319,23 +446,39 @@ async def _discover_sitemap_candidates(
 
 def _discover_anchor_candidates(
     html: str, base_url: str, domain: str
-) -> list[CandidateLink]:
+) -> tuple[list[CandidateLink], list[ConsideredLink]]:
     soup = BeautifulSoup(html, "lxml")
     candidates: list[CandidateLink] = []
+    considered: list[ConsideredLink] = []
     for anchor in soup.find_all("a", href=True):
         href = anchor["href"].strip()
         if not href or href.startswith(("mailto:", "tel:", "javascript:", "#")):
             continue
         absolute = urljoin(base_url, href)
         parsed = urlparse(absolute)
-        if not _same_site(absolute, domain) or _has_blocked_extension(parsed.path):
-            continue
         anchor_text = anchor.get_text(strip=True)
+
+        child_reason = _collection_child_reason(parsed.path)
+        if child_reason is not None:
+            considered.append(_drop(absolute, source="anchor", reason=child_reason))
+            continue
+        if not _same_site(absolute, domain):
+            considered.append(_drop(absolute, source="anchor", reason="off-site"))
+            continue
+        if _has_blocked_extension(parsed.path):
+            considered.append(
+                _drop(absolute, source="anchor", reason="blocked-extension")
+            )
+            continue
         classified = _classify(parsed.path, anchor_text)
         if classified is None:
+            considered.append(_drop(absolute, source="anchor", reason="unclassified"))
             continue
         kind, score = classified
         if score <= 0:
+            considered.append(
+                _drop(absolute, source="anchor", reason="non-positive-score")
+            )
             continue
         candidates.append(
             CandidateLink(
@@ -346,7 +489,7 @@ def _discover_anchor_candidates(
                 anchor_text=anchor_text or None,
             )
         )
-    return candidates
+    return candidates, considered
 
 
 def _guess_candidates(base_url: str, found_kinds: set[str]) -> list[CandidateLink]:
@@ -444,7 +587,12 @@ def find_linkedin_links(html: str, source_url: str) -> list[FoundLink]:
 
 
 async def discover_links(state: DomainState) -> dict:
-    """Node: rank candidate subpages and harvest emails/LinkedIn links from the homepage."""
+    """Node: rank candidate subpages and harvest emails/LinkedIn links from the homepage.
+
+    Also returns `considered_links` (list[ConsideredLink]): every URL looked at, not
+    just the winners, for the `--debug` audit trail. This key is diagnostic-only —
+    intentionally not part of `state.py`'s documented schema — and is never written to
+    `DomainResult`/`output.json`."""
     settings = get_settings()
     domain = state["domain"]
     home = state.get("home")
@@ -455,25 +603,45 @@ async def discover_links(state: DomainState) -> dict:
             "candidates": [],
             "candidate_emails": [],
             "linkedin_links": [],
+            "considered_links": [],
             "errors": errors,
         }
 
     base_url = state.get("base_url") or home.url
 
-    sitemap_candidates, sitemap_error = await _discover_sitemap_candidates(
-        base_url, domain
-    )
+    (
+        sitemap_candidates,
+        sitemap_considered,
+        sitemap_error,
+    ) = await _discover_sitemap_candidates(base_url, domain)
     if sitemap_error:
         errors.append(sitemap_error)
-    anchor_candidates = _discover_anchor_candidates(home.html, base_url, domain)
+    anchor_candidates, anchor_considered = _discover_anchor_candidates(
+        home.html, base_url, domain
+    )
 
     found_kinds = {c.kind for c in (*sitemap_candidates, *anchor_candidates)}
     guesses = _guess_candidates(base_url, found_kinds)
 
-    selected = _select_candidates(
-        [*sitemap_candidates, *anchor_candidates, *guesses],
-        settings.max_pages_per_domain,
-    )
+    classified_pool = [*sitemap_candidates, *anchor_candidates, *guesses]
+    selected = _select_candidates(classified_pool, settings.max_pages_per_domain)
+    selected_urls = {_normalize_path(c.url) for c in selected}
+
+    considered: list[ConsideredLink] = [*sitemap_considered, *anchor_considered]
+    for candidate in classified_pool:
+        decision = (
+            "selected" if _normalize_path(candidate.url) in selected_urls else "dropped"
+        )
+        considered.append(
+            ConsideredLink(
+                url=candidate.url,
+                kind=candidate.kind,
+                score=candidate.score,
+                source=candidate.discovered_by,
+                decision=decision,
+                reason=None if decision == "selected" else "not-selected",
+            )
+        )
 
     emails = find_emails(home.html, home.url, domain)
     linkedin_links = find_linkedin_links(home.html, home.url)
@@ -482,5 +650,6 @@ async def discover_links(state: DomainState) -> dict:
         "candidates": selected,
         "candidate_emails": emails,
         "linkedin_links": linkedin_links,
+        "considered_links": considered,
         "errors": errors,
     }
