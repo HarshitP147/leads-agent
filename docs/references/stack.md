@@ -123,6 +123,13 @@ Confirm against the **installed** source, then record findings below:
     `LLMExtraction` has several genuinely optional fields (`title`, `linkedin_url`,
     `missing_info_notes`, ...), so we deliberately do **not** use `strict=True` — see
     extraction-and-verification.md for the repair-retry + json_mode fallback we use instead.
+  - **Thinking mode vs structured output (17 Sep):** `deepseek-flash` / `deepseek-v4-pro`
+    default `thinking.type=enabled`. DeepSeek's chat-completions docs say named and
+    `required` `tool_choice` are **not** supported in thinking mode (HTTP 400:
+    `"Thinking mode does not support this tool_choice"`). LangChain's
+    `with_structured_output(..., method="function_calling")` sends a named tool_choice
+    for the Pydantic schema, so extraction must pass
+    `extra_body={"thinking": {"type": "disabled"}}`. Confirmed live against the API.
   - `_generate`/`_stream` wrap the OpenAI-SDK call and re-raise `JSONDecodeError` with a
     DeepSeek-specific message when the API itself returns a malformed response — catch
     this as `kind="llm_error"`, separate from our own `parsing_error`/`kind="parse_error"`

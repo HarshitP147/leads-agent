@@ -554,3 +554,23 @@ set"]` — `.env` has an empty key, so we never call the API. That is the correc
 status rule (no profile → failed) and the stage-level catch working; it is **not** a
 populated extraction. Fill `DEEPSEEK_API_KEY` and re-run for real profiles. `output.json`
 from this run is committed so the failure path is inspectable.
+
+2026-09-17 — M3 live extraction (key filled) — Two real API-integration bugs, both
+fixed after the key was in `.env`. (1) python-dotenv treated the inline comment on
+`DEEPSEEK_BASE_URL=  # optional override...` as the value, so ChatDeepSeek called a
+non-URL and httpx raised `UnsupportedProtocol` wrapped as `APIConnectionError`.
+Fix: only pass `base_url` if it starts with `http://`/`https://`; comment moved off
+the value line in `.env.example`. (2) `deepseek-flash` defaults to thinking mode;
+LangChain's `function_calling` structured output sends a named `tool_choice`, which
+DeepSeek rejects in thinking mode (`400 Thinking mode does not support this
+tool_choice`). Fix: `extra_body={"thinking": {"type": "disabled"}}` on
+`ChatDeepSeek`. Re-ran `python -m enrich postman.com supabase.com vapi.ai --debug`:
+
+| domain | status | score | leaders | emails | in/out tok |
+|---|---|---|---|---|---|
+| postman.com | ok | 0.88 | 3 (Asthana, Sobti, Kane + LinkedIn) | 4 | 7531/582 |
+| supabase.com | partial | 0.54 | 0 (no names on fetched pages) | 0 | 6451/333 |
+| vapi.ai | ok | 0.87 | 2 (one looks like a customer quote — grounding checks name presence, not "is this our exec") | 2 | 4442/489 |
+
+Total 18424 in / 1404 out, wall 28s. `pytest -q` 31 passed. `output.json` overwritten
+with this run.

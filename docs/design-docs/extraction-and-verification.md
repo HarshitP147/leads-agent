@@ -3,7 +3,10 @@
 ## Extraction (`extractor.py`)
 
 - LLM provider is **DeepSeek** (`LLM_PROVIDER=deepseek`), via `langchain-deepseek`'s
-  `ChatDeepSeek(model=EXTRACTION_MODEL, api_key=DEEPSEEK_API_KEY, temperature=0)`.
+  `ChatDeepSeek(model=EXTRACTION_MODEL, api_key=DEEPSEEK_API_KEY, temperature=0,
+  extra_body={"thinking": {"type": "disabled"}})`. Thinking is off because DeepSeek
+  rejects named/`required` `tool_choice` in thinking mode (HTTP 400), and
+  `with_structured_output(method="function_calling")` sends a named tool_choice.
   `ChatDeepSeek` subclasses `langchain_openai.BaseChatOpenAI`, so it gets the same
   `with_structured_output`/`bind_tools`/`usage_metadata` shapes verified in stack.md —
   `LLM_PROVIDER` staying a `Literal["deepseek", "anthropic", "openai"]` in `config.py`

@@ -1,106 +1,29 @@
 [
   {
-    "domain": "postman.com",
-    "status": "failed",
-    "profile": null,
-    "confidence": {
-      "score": 0.0,
-      "components": {
-        "no_extraction": 1.0
-      }
-    },
-    "pages": [
-      {
-        "url": "https://www.postman.com/",
-        "kind": "home",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 100491,
-        "clean_tokens": 73,
-        "discovered_by": "seed"
-      },
-      {
-        "url": "https://www.postman.com/company/about-postman/",
-        "kind": "about",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 92376,
-        "clean_tokens": 858,
-        "discovered_by": "anchor"
-      },
-      {
-        "url": "https://www.postman.com/pricing/",
-        "kind": "pricing",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 301460,
-        "clean_tokens": 3453,
-        "discovered_by": "anchor"
-      },
-      {
-        "url": "https://www.postman.com/company/press-media/",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 95749,
-        "clean_tokens": 733,
-        "discovered_by": "anchor"
-      },
-      {
-        "url": "https://www.postman.com/company/contact-sales/",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 78004,
-        "clean_tokens": 89,
-        "discovered_by": "anchor"
-      },
-      {
-        "url": "https://www.postman.com/company/careers/",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 88596,
-        "clean_tokens": 956,
-        "discovered_by": "anchor"
-      },
-      {
-        "url": "https://www.postman.com/company/contact-us/",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 85084,
-        "clean_tokens": 98,
-        "discovered_by": "anchor"
-      }
-    ],
-    "errors": [
-      {
-        "stage": "extract",
-        "kind": "llm_error",
-        "message": "DEEPSEEK_API_KEY is not set",
-        "url": null
-      }
-    ],
-    "usage": {
-      "input_tokens": 0,
-      "output_tokens": 0,
-      "llm_calls": 0,
-      "search_calls": 0,
-      "est_cost_usd": 0.0,
-      "by_component": {}
-    },
-    "duration_s": 23.51077016700583,
-    "scraped_at": "2026-09-17T07:56:36.658327+00:00"
-  },
-  {
     "domain": "supabase.com",
-    "status": "failed",
-    "profile": null,
+    "status": "partial",
+    "profile": {
+      "company_name": "Supabase",
+      "overview": "Supabase is the Postgres development platform, built by developers for developers, adding auth, realtime, storage, restful APIs, and edge functions on top of a dedicated Postgres database. It offers a dashboard, production-ready starter templates, and open source tooling so teams can build and scale apps without leaving the dashboard.",
+      "target_audience": "Developers and development teams building and scaling applications, from individual builders to enterprises needing SOC2, HIPAA, and SSO compliance.",
+      "industries": [
+        "Developer tools",
+        "Cloud infrastructure",
+        "Database software",
+        "Open source software",
+        "SaaS"
+      ],
+      "contact_emails": [],
+      "leaders": []
+    },
     "confidence": {
-      "score": 0.0,
+      "score": 0.54,
       "components": {
-        "no_extraction": 1.0
+        "field_coverage": 0.6,
+        "leader_quality": 0.0,
+        "source_coverage": 0.75,
+        "fetch_health": 1.0,
+        "llm_self": 0.55
       }
     },
     "pages": [
@@ -109,7 +32,7 @@
         "kind": "home",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 544622,
+        "raw_tokens": 545182,
         "clean_tokens": 537,
         "discovered_by": "seed"
       },
@@ -118,7 +41,7 @@
         "kind": "about",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 67497,
+        "raw_tokens": 68029,
         "clean_tokens": 553,
         "discovered_by": "sitemap"
       },
@@ -127,7 +50,7 @@
         "kind": "pricing",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 159808,
+        "raw_tokens": 159748,
         "clean_tokens": 3200,
         "discovered_by": "sitemap"
       },
@@ -136,7 +59,7 @@
         "kind": "company",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 349627,
+        "raw_tokens": 349643,
         "clean_tokens": 500,
         "discovered_by": "sitemap"
       },
@@ -145,7 +68,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 41882,
+        "raw_tokens": 41878,
         "clean_tokens": 72,
         "discovered_by": "sitemap"
       },
@@ -163,38 +86,76 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 39696,
+        "raw_tokens": 39666,
         "clean_tokens": 107,
         "discovered_by": "sitemap"
       }
     ],
-    "errors": [
-      {
-        "stage": "extract",
-        "kind": "llm_error",
-        "message": "DEEPSEEK_API_KEY is not set",
-        "url": null
-      }
-    ],
+    "errors": [],
     "usage": {
-      "input_tokens": 0,
-      "output_tokens": 0,
-      "llm_calls": 0,
+      "input_tokens": 6451,
+      "output_tokens": 333,
+      "llm_calls": 1,
       "search_calls": 0,
       "est_cost_usd": 0.0,
       "by_component": {}
     },
-    "duration_s": 31.83933691699349,
-    "scraped_at": "2026-09-17T07:56:44.988657+00:00"
+    "duration_s": 14.407726792007452,
+    "scraped_at": "2026-09-17T08:06:30.317370+00:00"
   },
   {
     "domain": "vapi.ai",
-    "status": "failed",
-    "profile": null,
+    "status": "ok",
+    "profile": {
+      "company_name": "Vapi",
+      "overview": "Vapi is a unified platform for building, testing, and deploying AI voice agents, handling orchestration, telephony, integrations, and real-time monitoring so teams can go from prompt to production quickly. Its main product is an API-native voice agent platform with enterprise-grade configurability, sub-500ms latency, and compliance with SOC 2, HIPAA, and PCI standards.",
+      "target_audience": "Developers and enterprise teams building and scaling production AI voice agents",
+      "industries": [
+        "Artificial Intelligence",
+        "Software / SaaS",
+        "Customer Support",
+        "Sales",
+        "Enterprise Technology"
+      ],
+      "contact_emails": [
+        {
+          "email": "Talent@vapi.ai",
+          "purpose": "careers",
+          "source_url": "https://vapi.ai/careers"
+        },
+        {
+          "email": "support@vapi.ai",
+          "purpose": "support",
+          "source_url": "https://vapi.ai/support"
+        }
+      ],
+      "leaders": [
+        {
+          "name": "Jason Mitura",
+          "title": "VP of Software Development",
+          "linkedin_url": null,
+          "linkedin_source": null,
+          "source_url": "https://vapi.ai/",
+          "verified": true
+        },
+        {
+          "name": "Alejandro Maza",
+          "title": "Chief Product & AI Officer, Kavak",
+          "linkedin_url": null,
+          "linkedin_source": null,
+          "source_url": "https://vapi.ai/",
+          "verified": true
+        }
+      ]
+    },
     "confidence": {
-      "score": 0.0,
+      "score": 0.87,
       "components": {
-        "no_extraction": 1.0
+        "field_coverage": 1.0,
+        "leader_quality": 0.75,
+        "source_coverage": 1.0,
+        "fetch_health": 1.0,
+        "llm_self": 0.6
       }
     },
     "pages": [
@@ -203,7 +164,7 @@
         "kind": "home",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 110687,
+        "raw_tokens": 110602,
         "clean_tokens": 467,
         "discovered_by": "seed"
       },
@@ -212,7 +173,7 @@
         "kind": "company",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 235474,
+        "raw_tokens": 236202,
         "clean_tokens": 457,
         "discovered_by": "sitemap"
       },
@@ -221,7 +182,7 @@
         "kind": "pricing",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 97136,
+        "raw_tokens": 96964,
         "clean_tokens": 679,
         "discovered_by": "sitemap"
       },
@@ -230,7 +191,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 151773,
+        "raw_tokens": 151307,
         "clean_tokens": 55,
         "discovered_by": "sitemap"
       },
@@ -239,7 +200,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 100395,
+        "raw_tokens": 99791,
         "clean_tokens": 334,
         "discovered_by": "sitemap"
       },
@@ -257,28 +218,170 @@
         "kind": "team",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 183593,
+        "raw_tokens": 183377,
         "clean_tokens": 494,
         "discovered_by": "sitemap"
       }
     ],
-    "errors": [
-      {
-        "stage": "extract",
-        "kind": "llm_error",
-        "message": "DEEPSEEK_API_KEY is not set",
-        "url": null
-      }
-    ],
+    "errors": [],
     "usage": {
-      "input_tokens": 0,
-      "output_tokens": 0,
-      "llm_calls": 0,
+      "input_tokens": 4442,
+      "output_tokens": 489,
+      "llm_calls": 1,
       "search_calls": 0,
       "est_cost_usd": 0.0,
       "by_component": {}
     },
-    "duration_s": 32.81201316700026,
-    "scraped_at": "2026-09-17T07:56:45.962479+00:00"
+    "duration_s": 17.949960833007935,
+    "scraped_at": "2026-09-17T08:06:33.860754+00:00"
+  },
+  {
+    "domain": "postman.com",
+    "status": "ok",
+    "profile": {
+      "company_name": "Postman",
+      "overview": "Postman is an API platform for building, testing, managing, and distributing APIs, simplifying each step of the API lifecycle and streamlining collaboration. Its AI-native platform includes the Postman AI Engineer, which takes on building, testing, and maintaining APIs across an organization.",
+      "target_audience": "Developers and engineering teams building, testing, and managing APIs, from individuals to enterprise organizations.",
+      "industries": [
+        "Software Development",
+        "API Development",
+        "Enterprise Software",
+        "Developer Tools"
+      ],
+      "contact_emails": [
+        {
+          "email": "info@postman.com",
+          "purpose": "general",
+          "source_url": "https://www.postman.com/company/about-postman/"
+        },
+        {
+          "email": "info-jp@postman.com",
+          "purpose": "general",
+          "source_url": "https://www.postman.com/company/about-postman/"
+        },
+        {
+          "email": "help@postman.com",
+          "purpose": "support",
+          "source_url": "https://www.postman.com/company/contact-sales/"
+        },
+        {
+          "email": "accommodations@postman.com",
+          "purpose": "careers",
+          "source_url": "https://www.postman.com/company/careers/"
+        }
+      ],
+      "leaders": [
+        {
+          "name": "Abhinav Asthana",
+          "title": "CEO/Co-Founder",
+          "linkedin_url": "https://www.linkedin.com/in/abhinavasthana",
+          "linkedin_source": "website",
+          "source_url": "https://www.postman.com/company/press-media/",
+          "verified": true
+        },
+        {
+          "name": "Ankit Sobti",
+          "title": "CTO/Co-Founder",
+          "linkedin_url": "https://www.linkedin.com/in/ankit-sobti",
+          "linkedin_source": "website",
+          "source_url": "https://www.postman.com/company/press-media/",
+          "verified": true
+        },
+        {
+          "name": "Abhijit Kane",
+          "title": "Product Architect/Co-Founder",
+          "linkedin_url": "https://in.linkedin.com/in/abhijitkane",
+          "linkedin_source": "website",
+          "source_url": "https://www.postman.com/company/press-media/",
+          "verified": true
+        }
+      ]
+    },
+    "confidence": {
+      "score": 0.88,
+      "components": {
+        "field_coverage": 1.0,
+        "leader_quality": 1.0,
+        "source_coverage": 0.5,
+        "fetch_health": 1.0,
+        "llm_self": 0.9
+      }
+    },
+    "pages": [
+      {
+        "url": "https://www.postman.com/",
+        "kind": "home",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 100184,
+        "clean_tokens": 73,
+        "discovered_by": "seed"
+      },
+      {
+        "url": "https://www.postman.com/company/about-postman/",
+        "kind": "about",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 92351,
+        "clean_tokens": 858,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/pricing/",
+        "kind": "pricing",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 301382,
+        "clean_tokens": 3453,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/company/press-media/",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 97481,
+        "clean_tokens": 733,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/company/contact-sales/",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 78011,
+        "clean_tokens": 89,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/company/careers/",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 88596,
+        "clean_tokens": 956,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/company/contact-us/",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 85059,
+        "clean_tokens": 98,
+        "discovered_by": "anchor"
+      }
+    ],
+    "errors": [],
+    "usage": {
+      "input_tokens": 7531,
+      "output_tokens": 582,
+      "llm_calls": 1,
+      "search_calls": 0,
+      "est_cost_usd": 0.0,
+      "by_component": {}
+    },
+    "duration_s": 28.114781249998487,
+    "scraped_at": "2026-09-17T08:06:44.022727+00:00"
   }
 ]

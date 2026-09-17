@@ -51,9 +51,15 @@ def _llm() -> ChatDeepSeek:
         "temperature": 0,
         "timeout": LLM_TIMEOUT_S,
         "max_retries": 2,
+        # Flash/V4-Pro default to thinking mode; named/required tool_choice (what
+        # with_structured_output(method="function_calling") sends) returns 400
+        # "Thinking mode does not support this tool_choice". Disable thinking.
+        "extra_body": {"thinking": {"type": "disabled"}},
     }
     base_url = (settings.deepseek_base_url or "").strip()
-    if base_url:
+    # python-dotenv can treat an inline `# comment` after an empty value as the
+    # value itself (seen: DEEPSEEK_BASE_URL="# optional override; ...").
+    if base_url.startswith(("http://", "https://")):
         kwargs["base_url"] = base_url
     return ChatDeepSeek(**kwargs)
 
