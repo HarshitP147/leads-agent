@@ -69,11 +69,11 @@ for the 16 Sep re-sequencing and why LangGraph/Browser Use moved from "day 1 spi
 - [x] End-to-end on 3 domains producing `output.json`
 
 ### M4 · Resilience (assignment step 4)
-- [ ] Stage-level error capture everywhere; domain + run level wrappers
-- [ ] Incremental output writes
-- [ ] Run the full failure matrix in QUALITY.md — 404, bot walls, timeouts, missing
+- [x] Stage-level error capture everywhere; domain + run level wrappers
+- [x] Incremental output writes
+- [x] Run the full failure matrix in QUALITY.md — 404, bot walls, timeouts, missing
       elements, bad API key — fix until all pass
-- [ ] `test_pipeline_failure.py` (a stage stub that raises still yields a `failed` `DomainResult`)
+- [x] `test_pipeline_failure.py` (a stage stub that raises still yields a `failed` `DomainResult`)
 
 ### M5 · Ship baseline (assignment: working baseline before bonuses)
 - [ ] README: what/why, linear pipeline diagram, setup (.env), run, sample output excerpt,
@@ -84,8 +84,8 @@ for the 16 Sep re-sequencing and why LangGraph/Browser Use moved from "day 1 spi
 ## Day 3 — 18 Sep (morning)
 
 ### M6 · Bonus: cost tracking
-- [ ] `cost.py` pricing (check official pages, note date) + rich summary table
-- [ ] Confirm usage events from M3's extractor roll up correctly per domain
+- [x] `cost.py` pricing (check official pages, note date) + rich summary table
+- [x] Confirm usage events from M3's extractor roll up correctly per domain
 
 ### M7 · Bonus: Tavily LinkedIn search
 - [ ] `search.py` (Tavily) as an optional pipeline stage after `verify`, gated on
@@ -601,3 +601,24 @@ with this run.
 Re-run: postman `ok` 0.92 (3 co-founders); vapi `partial` 0.59 (testimonials gone,
 emails lowercased, `/team` 404 guess instead of sales-team-agent); supabase
 `partial` 0.54. `pytest -q` 40 passed.
+
+2026-09-17 15:19 — M4 resilience — Ran every failure case in `QUALITY.md` and recorded
+the exact results there. Nonexistent domains, discovered 404s, a one-second domain
+timeout, missing Tavily credentials, a rejected DeepSeek credential, and a real
+Cloudflare 403 challenge all exited 0 and produced Pydantic-valid `output.json`.
+`fetcher.py` now records 404s as `http_404` errors as well as `not_found` pages, while
+the stage/domain/run wrappers and incremental writes keep every failure recoverable.
+
+2026-09-17 15:19 — M6 cost tracking — Wired `pipeline.finalize` to the real usage
+rollup and keyed pricing to ChatDeepSeek's emitted `deepseek-flash` / `deepseek-v4-pro`
+IDs. Rates are the conservative peak, cache-miss prices from DeepSeek's official page,
+checked 17 Sep 2026; unknown IDs warn and cost zero instead of disappearing silently.
+The CLI shows six decimal places per domain and on the TOTAL row; a live run populated
+`by_component.extraction`, proving usage events survive the pipeline merge.
+
+2026-09-17 15:19 — verification follow-up — Homepage-only people may now pass when
+they have a real professional role with no foreign company, or the page identifies
+them as the personal site's owner/subject. Page titles are included as deterministic
+grounding because Trafilatura can omit a visible hero H1; raw HTML still never reaches
+the LLM. Live `harshit147.dev` now keeps Harshit Pandit, while both Vapi customer/
+foreign-company fixtures still drop.

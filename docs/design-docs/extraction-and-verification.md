@@ -79,8 +79,13 @@ Runs deterministically after extraction.
 - Drop if the title names a company other than the target (e.g. `CPO, Kavak`).
 - Drop if the evidence/name sits in a testimonial/quote attribution block.
 - Prefer about/team/company/leadership pages. A name found **only** on the homepage
-  needs a strong title (`founder`/`CEO`/`CTO`/`COO`/`VP`/`Head of`) and no foreign
-  company in the title.
+  is kept if it has any professional title with no foreign company, or if the page
+  presents them as the site's owner/author/subject (personal sites: name in the
+  domain, matching `company_name`, "I'm …" / "about me"). Testimonials/quotes are
+  still dropped.
+- Fetched page titles count as deterministic name evidence. This covers visible hero
+  names that Trafilatura omits from cleaned markdown without exposing raw HTML to the
+  LLM or weakening the name-match requirement.
 - Unverified / dropped leaders are logged as
   `ErrorRecord(kind="unverified_person")` so the reviewer sees we caught it.
 - LinkedIn URL kept only if it appears in `linkedin_links` or page text, and matches

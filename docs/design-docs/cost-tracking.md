@@ -11,9 +11,10 @@
 ## Pricing
 
 `PRICING` dict in `cost.py`: `{model_id: (usd_per_mtok_input, usd_per_mtok_output)}` plus
-`TAVILY_USD_PER_CALL`. **Fill values from the providers' official pricing pages at build
-time and note the date checked in a comment.** Unknown model → cost 0 with a warning, never
-a crash.
+`TAVILY_USD_PER_CALL`. Values filled from https://api-docs.deepseek.com/quick_start/pricing
+on **17 Sep 2026** (cache-miss peak-hour list price for `deepseek-flash` and
+`deepseek-v4-pro`). Unknown model → cost 0 with a warning, never a crash. CLI prints
+est $ to 6 decimal places.
 
 ## Reporting
 

@@ -90,13 +90,9 @@ def _profile_from_state(state: DomainState) -> CompanyProfile | None:
 
 
 def _usage_from_events(events: list[UsageEvent]) -> Usage:
-    """Token rollup only — USD stays 0 until M6 fills `cost.py` pricing."""
-    return Usage(
-        input_tokens=sum(event.input_tokens for event in events),
-        output_tokens=sum(event.output_tokens for event in events),
-        llm_calls=sum(1 for event in events if event.component == "extraction"),
-        search_calls=sum(event.search_calls for event in events),
-    )
+    from enrich.cost import summarize_usage
+
+    return summarize_usage(events)
 
 
 def finalize(state: DomainState, *, started: float) -> DomainResult:
@@ -176,7 +172,11 @@ async def _run_stages(
             }
         _merge(state, await extractor.extract(state))
         _merge(state, await verify.verify(state))
-        # TODO M7 (bonus): search_linkedin
+        # M7 (bonus) will call search_linkedin when a Tavily key exists. Until then
+        # (and whenever the key is unset) skip silently with a route_log entry —
+        # QUALITY.md: "unset TAVILY_API_KEY and run → route_log notes search skipped".
+        if not get_settings().tavily_api_key:
+            _merge(state, {"route_log": ["search_linkedin:skipped_no_tavily_key"]})
     # Hard fetch_home failure skips the LLM (ARCHITECTURE.md route_after_fetch_home)
     # but still scores — no extraction → 0.0, homepage-failed cap ≤ 0.2.
     _merge(state, await scoring.score(state))

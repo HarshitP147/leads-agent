@@ -1,121 +1,17 @@
 [
   {
-    "domain": "supabase.com",
-    "status": "partial",
-    "profile": {
-      "company_name": "Supabase",
-      "overview": "Supabase is the Postgres development platform, built by developers for developers, adding auth, realtime, storage, restful APIs, and edge functions on top of a dedicated Postgres database. It offers a fully managed backend with a dashboard, client libraries, and production-ready starter templates for frameworks like React, Next.js, and Flutter.",
-      "target_audience": "Developers and teams building web, mobile, and AI applications who need a scalable Postgres-based backend.",
-      "industries": [
-        "Developer tools",
-        "Cloud infrastructure",
-        "Database software",
-        "Open source software",
-        "SaaS"
-      ],
-      "contact_emails": [],
-      "leaders": []
-    },
-    "confidence": {
-      "score": 0.54,
-      "components": {
-        "field_coverage": 0.6,
-        "leader_quality": 0.0,
-        "source_coverage": 0.75,
-        "fetch_health": 1.0,
-        "llm_self": 0.55
-      }
-    },
-    "pages": [
-      {
-        "url": "https://supabase.com/",
-        "kind": "home",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 545534,
-        "clean_tokens": 537,
-        "discovered_by": "seed"
-      },
-      {
-        "url": "https://supabase.com/contribute/about",
-        "kind": "about",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 67512,
-        "clean_tokens": 553,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/pricing",
-        "kind": "pricing",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 162083,
-        "clean_tokens": 3200,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/careers",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 349494,
-        "clean_tokens": 500,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/contact/sales",
-        "kind": "contact",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 41927,
-        "clean_tokens": 72,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/company",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 68224,
-        "clean_tokens": 443,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/support",
-        "kind": "contact",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 39725,
-        "clean_tokens": 107,
-        "discovered_by": "sitemap"
-      }
-    ],
-    "errors": [],
-    "usage": {
-      "input_tokens": 6583,
-      "output_tokens": 356,
-      "llm_calls": 1,
-      "search_calls": 0,
-      "est_cost_usd": 0.0,
-      "by_component": {}
-    },
-    "duration_s": 20.180380666992278,
-    "scraped_at": "2026-09-17T08:29:51.437302+00:00"
-  },
-  {
     "domain": "vapi.ai",
     "status": "partial",
     "profile": {
       "company_name": "Vapi",
-      "overview": "Vapi is a unified platform for building, testing, and deploying voice AI agents, handling orchestration, telephony, and real-time monitoring so teams can go from prompt to production quickly. It provides enterprise-grade configurability, integrations, and scalable infrastructure supporting up to millions of calls with sub-500ms latency.",
-      "target_audience": "Developers and enterprises building and scaling production voice AI agents",
+      "overview": "Vapi is a platform for building, testing, and deploying AI voice agents, handling orchestration, telephony, and real-time monitoring so teams can go from prompt to production quickly. It offers enterprise-grade capabilities including SSO, RBAC, guardrails, and compliance with SOC 2, HIPAA, and PCI standards.",
+      "target_audience": "Developers and enterprises building and scaling AI voice agents for customer support and inbound call handling.",
       "industries": [
         "Voice AI",
-        "Artificial Intelligence",
-        "Developer Tools",
-        "Enterprise Software",
-        "Customer Support"
+        "Developer tools",
+        "Enterprise software",
+        "Customer support",
+        "Telecommunications"
       ],
       "contact_emails": [
         {
@@ -132,13 +28,13 @@
       "leaders": []
     },
     "confidence": {
-      "score": 0.59,
+      "score": 0.58,
       "components": {
         "field_coverage": 0.8,
         "leader_quality": 0.0,
         "source_coverage": 0.75,
         "fetch_health": 0.8571428571428571,
-        "llm_self": 0.55
+        "llm_self": 0.5
       }
     },
     "pages": [
@@ -147,7 +43,7 @@
         "kind": "home",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 2098601,
+        "raw_tokens": 2097912,
         "clean_tokens": 467,
         "discovered_by": "seed"
       },
@@ -156,7 +52,7 @@
         "kind": "company",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 236261,
+        "raw_tokens": 235913,
         "clean_tokens": 457,
         "discovered_by": "sitemap"
       },
@@ -165,7 +61,7 @@
         "kind": "pricing",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 96937,
+        "raw_tokens": 96942,
         "clean_tokens": 679,
         "discovered_by": "sitemap"
       },
@@ -174,7 +70,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 151468,
+        "raw_tokens": 151450,
         "clean_tokens": 55,
         "discovered_by": "sitemap"
       },
@@ -183,7 +79,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 102202,
+        "raw_tokens": 101911,
         "clean_tokens": 334,
         "discovered_by": "sitemap"
       },
@@ -206,25 +102,34 @@
         "discovered_by": "guess"
       }
     ],
-    "errors": [],
+    "errors": [
+      {
+        "stage": "fetcher",
+        "kind": "http_404",
+        "message": "HTTP 404 for https://vapi.ai/team",
+        "url": "https://vapi.ai/team"
+      }
+    ],
     "usage": {
       "input_tokens": 3531,
-      "output_tokens": 366,
+      "output_tokens": 368,
       "llm_calls": 1,
       "search_calls": 0,
-      "est_cost_usd": 0.0,
-      "by_component": {}
+      "est_cost_usd": 0.001501,
+      "by_component": {
+        "extraction": 0.001501
+      }
     },
-    "duration_s": 20.451213708001887,
-    "scraped_at": "2026-09-17T08:29:51.709217+00:00"
+    "duration_s": 18.178844915993977,
+    "scraped_at": "2026-09-17T09:50:32.029973+00:00"
   },
   {
     "domain": "postman.com",
     "status": "ok",
     "profile": {
       "company_name": "Postman",
-      "overview": "Postman is an API platform for building, testing, managing, and distributing APIs, now positioned as an AI-native API platform with an AI Engineer that automates API work. It offers an API client, specs and mock servers, monitoring, Flows automation, and enterprise governance capabilities across Free, Solo, Team, and Enterprise plans.",
-      "target_audience": "Software developers, QA and API engineers, and enterprise platform/API teams building, testing, and governing APIs.",
+      "overview": "Postman is an API platform for building, testing, managing, and distributing APIs, now positioned as an AI-native API platform with an AI Engineer that automates API work. It offers an API client, collections, mock servers, monitoring, Flows, and governance features across Free, Solo, Team, and Enterprise plans.",
+      "target_audience": "Software developers, QA/test engineers, and API teams at organizations of all sizes, from individual developers to large enterprises.",
       "industries": [
         "Software",
         "Information Technology",
@@ -296,7 +201,7 @@
         "kind": "home",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 100135,
+        "raw_tokens": 100183,
         "clean_tokens": 73,
         "discovered_by": "seed"
       },
@@ -314,7 +219,7 @@
         "kind": "pricing",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 301194,
+        "raw_tokens": 301382,
         "clean_tokens": 10,
         "discovered_by": "anchor"
       },
@@ -332,7 +237,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 78036,
+        "raw_tokens": 77994,
         "clean_tokens": 89,
         "discovered_by": "anchor"
       },
@@ -341,7 +246,7 @@
         "kind": "team",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 301194,
+        "raw_tokens": 301382,
         "clean_tokens": 10,
         "discovered_by": "guess"
       },
@@ -350,7 +255,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 85084,
+        "raw_tokens": 85059,
         "clean_tokens": 98,
         "discovered_by": "anchor"
       }
@@ -358,13 +263,121 @@
     "errors": [],
     "usage": {
       "input_tokens": 7210,
-      "output_tokens": 573,
+      "output_tokens": 583,
       "llm_calls": 1,
       "search_calls": 0,
-      "est_cost_usd": 0.0,
-      "by_component": {}
+      "est_cost_usd": 0.002863,
+      "by_component": {
+        "extraction": 0.002863
+      }
     },
-    "duration_s": 31.30462808300217,
-    "scraped_at": "2026-09-17T08:30:02.559877+00:00"
+    "duration_s": 27.269472416999633,
+    "scraped_at": "2026-09-17T09:50:41.117869+00:00"
+  },
+  {
+    "domain": "supabase.com",
+    "status": "partial",
+    "profile": {
+      "company_name": "Supabase",
+      "overview": "Supabase is the Postgres development platform, built by developers for developers. It adds auth, realtime, storage, restful APIs, and edge functions on top of a dedicated Postgres database, all managed from a single dashboard.",
+      "target_audience": "Developers and teams building applications who need a Postgres-based backend with auth, storage, realtime, and APIs.",
+      "industries": [
+        "Developer tools",
+        "Cloud infrastructure",
+        "Database software",
+        "Open source software",
+        "SaaS"
+      ],
+      "contact_emails": [],
+      "leaders": []
+    },
+    "confidence": {
+      "score": 0.51,
+      "components": {
+        "field_coverage": 0.6,
+        "leader_quality": 0.0,
+        "source_coverage": 0.75,
+        "fetch_health": 1.0,
+        "llm_self": 0.4
+      }
+    },
+    "pages": [
+      {
+        "url": "https://supabase.com/",
+        "kind": "home",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 543804,
+        "clean_tokens": 537,
+        "discovered_by": "seed"
+      },
+      {
+        "url": "https://supabase.com/contribute/about",
+        "kind": "about",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 69055,
+        "clean_tokens": 553,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/pricing",
+        "kind": "pricing",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 161774,
+        "clean_tokens": 3200,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/careers",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 349409,
+        "clean_tokens": 500,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/contact/sales",
+        "kind": "contact",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 41649,
+        "clean_tokens": 72,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/company",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 68212,
+        "clean_tokens": 443,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/support",
+        "kind": "contact",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 39702,
+        "clean_tokens": 107,
+        "discovered_by": "sitemap"
+      }
+    ],
+    "errors": [],
+    "usage": {
+      "input_tokens": 6583,
+      "output_tokens": 335,
+      "llm_calls": 1,
+      "search_calls": 0,
+      "est_cost_usd": 0.002377,
+      "by_component": {
+        "extraction": 0.002377
+      }
+    },
+    "duration_s": 50.855178792000515,
+    "scraped_at": "2026-09-17T09:51:04.705267+00:00"
   }
 ]

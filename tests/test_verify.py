@@ -7,6 +7,7 @@ import pytest
 
 from enrich.cleaner import CleanPage, TeamCard
 from enrich.discovery import FoundEmail, FoundLink
+from enrich.fetcher import FetchedPage
 from enrich.models import LLMEmail, LLMExtraction, LLMLeader
 from enrich.verify import verify
 
@@ -195,6 +196,96 @@ async def test_vapi_kavak_cpo_alejandro_maza_is_dropped() -> None:
     assert update["leaders"] == []
     assert update["errors"][0].kind == "unverified_person"
     assert "Alejandro Maza" in update["errors"][0].message
+
+
+@pytest.mark.asyncio
+async def test_personal_site_owner_on_homepage_is_kept() -> None:
+    """harshit147.dev-style: title/H1 names the owner, extractor drops the H1."""
+    home = "https://harshit147.dev/"
+    extraction = LLMExtraction(
+        company_name="Harshit Pandit",
+        overview="Harshit builds software. This is a personal site.",
+        target_audience="Hiring managers.",
+        industries=["software"],
+        leaders=[
+            _leader("Harshit Pandit", title=None, source_url=home),
+        ],
+        self_confidence=0.6,
+    )
+    state = {
+        "domain": "harshit147.dev",
+        "cleaned": [
+            CleanPage(
+                url=home,
+                kind="home",
+                markdown="Hi, I'm Harshit. I build software.\n",
+                raw_tokens=50,
+                clean_tokens=20,
+            )
+        ],
+        "pages": [
+            FetchedPage(
+                url=home,
+                requested_url=home,
+                kind="home",
+                discovered_by="seed",
+                status="ok",
+                http_status=200,
+                html="<h1>Harshit Pandit</h1>",
+                title="Harshit Pandit",
+            )
+        ],
+        "candidate_emails": [],
+        "linkedin_links": [],
+        "team_cards": [],
+        "extraction": extraction,
+        "errors": [],
+    }
+    update = await verify(state)
+    assert [leader.name for leader in update["leaders"]] == ["Harshit Pandit"]
+    assert update["errors"] == []
+
+
+@pytest.mark.asyncio
+async def test_homepage_professional_title_without_foreign_company_is_kept() -> None:
+    home = "https://acme-corp.io/"
+    extraction = _extraction(
+        [_leader("Jane Founder", title="Software Engineer", source_url=home)]
+    )
+    state = _state(
+        extraction,
+        "Jane Founder builds developer tools at Acme.",
+    )
+    state["cleaned"] = [
+        CleanPage(
+            url=home,
+            kind="home",
+            markdown="Jane Founder builds developer tools at Acme.",
+            raw_tokens=40,
+            clean_tokens=20,
+        )
+    ]
+    update = await verify(state)
+    assert [leader.name for leader in update["leaders"]] == ["Jane Founder"]
+
+
+@pytest.mark.asyncio
+async def test_personal_site_author_on_homepage_is_kept() -> None:
+    home = "https://technical-notes.dev/"
+    extraction = _extraction([_leader("Avery Writer", title=None, source_url=home)])
+    state = _state(extraction, "Technical Notes — written by Avery Writer.")
+    state["domain"] = "technical-notes.dev"
+    state["cleaned"] = [
+        CleanPage(
+            url=home,
+            kind="home",
+            markdown="Technical Notes — written by Avery Writer.",
+            raw_tokens=20,
+            clean_tokens=10,
+        )
+    ]
+    update = await verify(state)
+    assert [leader.name for leader in update["leaders"]] == ["Avery Writer"]
 
 
 @pytest.mark.asyncio

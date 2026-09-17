@@ -28,9 +28,11 @@ _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 _TITLE_SPLIT_RE = re.compile(
     r"\s*(?:,|(?:\bat\b)|[|@]|(?:\s[-–—]\s))\s*", re.IGNORECASE
 )
-_STRONG_TITLE_RE = re.compile(
-    r"\b(founder|co-?founder|ceo|cto|coo|cfo|president|vp|"
-    r"vice[ -]?president|head of)\b",
+_PROFESSIONAL_TITLE_RE = re.compile(
+    r"\b(founder|co-?founder|chief|ceo|cto|coo|cfo|cpo|cro|president|"
+    r"vice[ -]?president|vp|head|director|manager|lead|engineer|developer|"
+    r"designer|researcher|scientist|architect|analyst|consultant|specialist|"
+    r"officer)\b",
     re.IGNORECASE,
 )
 PREFERRED_LEADER_KINDS = frozenset({"about", "team", "company", "leadership"})
@@ -120,6 +122,7 @@ def _name_variants(name: str) -> list[str]:
 
 def _haystacks(state: DomainState) -> list[str]:
     texts = [_normalise_name(page.markdown) for page in state.get("cleaned", [])]
+    texts.extend(_normalise_name(page.title or "") for page in state.get("pages", []))
     for card in state.get("team_cards", []):
         texts.append(_normalise_name(f"{card.name} {card.role or ''}"))
     for link in state.get("linkedin_links", []):
@@ -231,6 +234,42 @@ def _in_quote_context(name: str, evidence: str, markdown: str) -> bool:
     return len(line) < 120
 
 
+def _has_professional_title(title: str | None) -> bool:
+    """Recognise ordinary job roles; foreign-company titles are dropped earlier."""
+    return bool(title and _PROFESSIONAL_TITLE_RE.search(title))
+
+
+def _personal_site_subject(item: LLMLeader, state: DomainState, markdown: str) -> bool:
+    """Personal/portfolio sites often have the owner only on the homepage."""
+    name_tokens = [tok for tok in _normalise_name(item.name).split() if len(tok) > 2]
+    domain = (state.get("domain") or "").casefold()
+    if any(tok in domain for tok in name_tokens):
+        return True
+    extraction = state.get("extraction")
+    if extraction is not None:
+        company = _normalise_name(extraction.company_name)
+        person = _normalise_name(item.name)
+        if company and (company == person or person in company):
+            return True
+    low = markdown.casefold()
+    owner_markers = ("i'm ", "i am ", "hi, i'm", "hello, i'm", "about me", "my name is")
+    if any(marker in low for marker in owner_markers):
+        return True
+    return any(
+        marker in _normalise_name(markdown)
+        for variant in _name_variants(item.name)
+        for marker in (f"written by {variant}", f"author {variant}", f"by {variant}")
+    )
+
+
+def _homepage_leader_allowed(
+    item: LLMLeader, state: DomainState, markdown: str
+) -> bool:
+    if _has_professional_title(item.title):
+        return True
+    return _personal_site_subject(item, state, markdown)
+
+
 def _drop(item: LLMLeader, reason: str) -> tuple[None, ErrorRecord]:
     return None, ErrorRecord(
         stage="verify",
@@ -259,8 +298,8 @@ def _one_leader(
     if markdown and _in_quote_context(item.name, item.evidence, markdown):
         return _drop(item, "testimonial/quote")
     homepage_only = not _name_on_preferred_pages(item.name, state)
-    if homepage_only and not _STRONG_TITLE_RE.search(item.title or ""):
-        return _drop(item, "homepage-only without exec title")
+    if homepage_only and not _homepage_leader_allowed(item, state, markdown):
+        return _drop(item, "homepage-only without title or personal-site signal")
     seen.add(key)
     linkedin = _linkedin_kept(item.linkedin_url, state)
     return (

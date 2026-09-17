@@ -435,7 +435,13 @@ async def _fetch_one(
                 html=None,
                 title=title,
             )
-            return fetched, None
+            error = ErrorRecord(
+                stage="fetcher",
+                kind="http_404",
+                message=_one_line(f"HTTP 404 for {url}"),
+                url=url,
+            )
+            return fetched, error
 
         status: Literal["ok", "error"] = (
             "ok" if (http_status and http_status < 400) else "error"

@@ -134,10 +134,10 @@ def _print_summary(results: list[DomainResult], *, wall_time_s: float) -> None:
         "reduction",
         "in tok",
         "out tok",
-        "est $",
         "duration",
     ):
         table.add_column(col)
+    table.add_column("est $", min_width=12, no_wrap=True)
 
     total_raw = total_clean = 0
     for i, r in enumerate(results):
@@ -154,8 +154,8 @@ def _print_summary(results: list[DomainResult], *, wall_time_s: float) -> None:
             _reduction_pct(raw, clean),
             str(r.usage.input_tokens),
             str(r.usage.output_tokens),
-            f"${r.usage.est_cost_usd:.4f}",
             f"{r.duration_s:.1f}s",
+            f"${r.usage.est_cost_usd:.6f}",
             end_section=(i == len(results) - 1),
         )
     table.add_row(
@@ -168,8 +168,8 @@ def _print_summary(results: list[DomainResult], *, wall_time_s: float) -> None:
         _reduction_pct(total_raw, total_clean),
         str(sum(r.usage.input_tokens for r in results)),
         str(sum(r.usage.output_tokens for r in results)),
-        f"${sum(r.usage.est_cost_usd for r in results):.4f}",
         f"{wall_time_s:.1f}s",
+        f"${sum(r.usage.est_cost_usd for r in results):.6f}",
         style="bold",
     )
     console.print(table)

@@ -5,12 +5,26 @@ See docs/design-docs/cost-tracking.md.
 
 from __future__ import annotations
 
+import logging
+
 from pydantic import BaseModel
 
-# PRICING: {model_id: (usd_per_mtok_input, usd_per_mtok_output)}. Fill in from providers'
-# official pricing pages before M6 and note the date checked here.
-PRICING: dict[str, tuple[float, float]] = {}
-TAVILY_USD_PER_CALL: float = 0.0
+from enrich.models import Usage
+
+logger = logging.getLogger(__name__)
+
+# Official DeepSeek API pricing (https://api-docs.deepseek.com/quick_start/pricing),
+# checked 17 Sep 2026. Values are USD per 1M tokens, cache-MISS, peak-hour list
+# price (upper bound of the published range). Off-peak miss is half of these
+# (flash $0.15 in / $0.60 out; v4-pro $0.66 in / $1.98 out). Cache-hit is much
+# cheaper ($0.006 / $0.044 peak) — we do not currently split hit vs miss in
+# usage_metadata, so the estimate is conservative.
+# Keys must match EXTRACTION_MODEL / ChatDeepSeek.model_name exactly.
+PRICING: dict[str, tuple[float, float]] = {
+    "deepseek-flash": (0.30, 1.20),
+    "deepseek-v4-pro": (1.32, 3.96),
+}
+TAVILY_USD_PER_CALL: float = 0.0  # TODO M7: source before search events are emitted.
 
 
 class UsageEvent(BaseModel):
@@ -22,6 +36,38 @@ class UsageEvent(BaseModel):
     estimated: bool = False
 
 
-def summarize_usage(events: list[UsageEvent]):
-    """Roll up UsageEvents into a models.Usage. Unknown model -> cost 0, never a crash."""
-    raise NotImplementedError
+def _event_cost(event: UsageEvent) -> float:
+    if event.search_calls:
+        return event.search_calls * TAVILY_USD_PER_CALL
+    if not event.model:
+        return 0.0
+    rates = PRICING.get(event.model)
+    if rates is None:
+        logger.warning(
+            "unknown model %r has no PRICING entry; costing $0.00", event.model
+        )
+        return 0.0
+    usd_in, usd_out = rates
+    return (event.input_tokens / 1_000_000) * usd_in + (
+        event.output_tokens / 1_000_000
+    ) * usd_out
+
+
+def summarize_usage(events: list[UsageEvent]) -> Usage:
+    """Roll up UsageEvents into a models.Usage. Unknown model -> cost 0 + warning."""
+    by_component: dict[str, float] = {}
+    for event in events:
+        by_component[event.component] = by_component.get(
+            event.component, 0.0
+        ) + _event_cost(event)
+    rounded_components = {
+        component: round(cost, 6) for component, cost in by_component.items()
+    }
+    return Usage(
+        input_tokens=sum(event.input_tokens for event in events),
+        output_tokens=sum(event.output_tokens for event in events),
+        llm_calls=sum(1 for event in events if event.component == "extraction"),
+        search_calls=sum(event.search_calls for event in events),
+        est_cost_usd=round(sum(by_component.values()), 6),
+        by_component=rounded_components,
+    )
