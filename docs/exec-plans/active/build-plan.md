@@ -638,3 +638,10 @@ are accepted only from target-domain search evidence, so Tavily expands coverage
 turning snippets into unverified facts. Every basic search is costed and failures degrade
 per call. The live three-domain run produced 7/7 leader LinkedIn URLs, 19 public emails,
 14 Tavily calls, and a $0.118750 combined estimated cost; exact results are in QUALITY.md.
+
+2026-09-17 16:57 — M4 failure-matrix rerun — Re-executed all six requested CLI cases
+one at a time; every process exited 0 and every generated `output.json` validated. The
+missing-Tavily marker existed in internal state but was invisible in normal CLI output,
+so `search.py` now logs that exact route marker at INFO and a test locks it in. Postman
+served seven HTTP 200 pages rather than a bot wall; this is recorded as a no-false-positive
+live result, with the real challenge behavior still covered by deterministic fixtures.

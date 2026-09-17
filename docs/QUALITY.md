@@ -62,6 +62,27 @@ all three results passed `DomainResult.model_validate`.
 | vapi.ai | ok / 0.84 | 2/2 | 3 | 4 | $0.033501 |
 | **TOTAL** | 3 domains | 7/7 | 19 | 14 | **$0.118750** |
 
+### Requested failure-matrix rerun — 17 Sep 2026, 16:53–16:57 IST
+
+Each command ran separately. Every command exited 0 and its resulting `output.json`
+passed `DomainResult.model_validate`.
+
+| # | Actual command | Exit | Actual output/result | Pass |
+|---:|---|---:|---|:---:|
+| 1 | `.venv/bin/python -m enrich example.invalid` | 0 | `failed`; homepage `error`; two `dns_error` records for bare + `www` attempts | PASS |
+| 2 | `.venv/bin/python -m enrich example.com --max-pages 2` | 0 | `partial`; `/` HTTP 200; `/about` and `/company` HTTP 404, both `status=not_found` with `http_404` errors | PASS |
+| 3 | `.venv/bin/python -m enrich vapi.ai --timeout 1` | 0 | `failed`; `cli/timeout: exceeded 1s`; TOTAL duration 1.0s | PASS |
+| 4 | `env TAVILY_API_KEY= .venv/bin/python -m enrich vapi.ai` | 0 | `partial`; `search_calls=0`; console logged `route_log=search_linkedin:skipped_no_tavily_key`; expected `/team` 404 only | PASS |
+| 5 | `env DEEPSEEK_API_KEY=bad .venv/bin/python -m enrich example.com --max-pages 0` | 0 | DeepSeek HTTP 401 captured as `extract/llm_error`; final status `failed` | PASS |
+| 6 | `.venv/bin/python -m enrich postman.com --debug` | 0 | `ok`, confidence 0.97; 7/7 pages HTTP 200; no errors; `bot_wall_count=0`; $0.042871 | PASS* |
+
+\* Postman did not present a bot wall in this live run, so the detector correctly did
+not create a false-positive error. The deterministic Cloudflare fixture in
+`test_bot_wall.py` covers detection, and `test_pipeline_failure.py` covers degradation
+to a completed result when a bot wall is present. Post-matrix verification:
+`uv run pytest -q` → 60 passed; `ruff check` and `ruff format --check` passed for
+`enrich/` and `tests/`.
+
 ## Output sanity (read it like the reviewer)
 
 - Every leader name visible on the site or on the linked search result.

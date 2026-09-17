@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Self
 
 import pytest
@@ -196,10 +197,15 @@ async def test_no_leaders_discovers_supabase_founders_and_public_emails(
 
 
 @pytest.mark.asyncio
-async def test_missing_key_skips_without_error(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_missing_key_skips_without_error(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     monkeypatch.setattr(search, "get_settings", lambda: Settings(tavily_api_key=None))
+    caplog.set_level(logging.INFO, logger="enrich.search")
     update = await search.search_linkedin(_supabase_state())
     assert update == {"route_log": ["search_linkedin:skipped_no_tavily_key"]}
+    assert "route_log=search_linkedin:skipped_no_tavily_key" in caplog.text
 
 
 class _FailingClient:

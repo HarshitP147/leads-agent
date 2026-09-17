@@ -429,6 +429,10 @@ async def search_linkedin(state: DomainState) -> dict:
     settings = get_settings()
     api_key = (settings.tavily_api_key or "").strip()
     if not api_key:
+        logger.info(
+            "domain=%s route_log=search_linkedin:skipped_no_tavily_key",
+            state.get("domain", ""),
+        )
         return {"route_log": ["search_linkedin:skipped_no_tavily_key"]}
 
     extraction = state.get("extraction")

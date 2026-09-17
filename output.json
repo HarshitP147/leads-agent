@@ -1,338 +1,16 @@
 [
   {
-    "domain": "supabase.com",
-    "status": "ok",
-    "profile": {
-      "company_name": "Supabase",
-      "overview": "Supabase is the Postgres development platform, built by developers for developers, adding auth, realtime, storage, restful APIs, and edge functions on top of a dedicated Postgres database. It is an open source, fully remote company whose platform lets teams start free and scale to millions of users.",
-      "target_audience": "Developers and development teams building and scaling applications who need a Postgres-based backend platform.",
-      "industries": [
-        "Developer tools",
-        "Cloud infrastructure",
-        "Database software",
-        "Open source software",
-        "Backend as a Service"
-      ],
-      "contact_emails": [
-        {
-          "email": "support@supabase.com",
-          "purpose": "support",
-          "source_url": "https://supabase.com/docs/guides/troubleshooting/converted-github-account-to-organisation---lost-supabase-account-access-5wsE_1"
-        },
-        {
-          "email": "legal@supabase.com",
-          "purpose": "other",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "privacy@supabase.com",
-          "purpose": "privacy",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "abuse@supabase.com",
-          "purpose": "security",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "security@supabase.com",
-          "purpose": "security",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "help-events@supabase.com",
-          "purpose": "support",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "legal@supabase.io",
-          "purpose": "other",
-          "source_url": "https://supabase.com/aup"
-        },
-        {
-          "email": "abuse@supabase.io",
-          "purpose": "security",
-          "source_url": "https://supabase.com/aup"
-        },
-        {
-          "email": "privacy@supabase.io",
-          "purpose": "privacy",
-          "source_url": "https://supabase.com/legal/customer-resources/data-processing-addendum"
-        },
-        {
-          "email": "security@supabase.io",
-          "purpose": "security",
-          "source_url": "https://supabase.com/blog/supabase-security-2025-retro"
-        }
-      ],
-      "leaders": [
-        {
-          "name": "Ant Wilson",
-          "title": "Co-Founder & CTO",
-          "linkedin_url": "https://uk.linkedin.com/in/ant-wilson-46179937",
-          "linkedin_source": "search",
-          "source_url": "https://www.linkedin.com/posts/ant-wilson-46179937_5-years-of-supabase-activity-7282683473134252033-usoO",
-          "verified": true
-        },
-        {
-          "name": "Paul Copplestone",
-          "title": "CEO",
-          "linkedin_url": "https://www.linkedin.com/in/paulcopplestone",
-          "linkedin_source": "search",
-          "source_url": "https://www.linkedin.com/posts/paulcopplestone_supabase-is-now-iso-27001-certified-this-activity-7452738864647073793-qJTM",
-          "verified": true
-        }
-      ]
-    },
-    "confidence": {
-      "score": 0.86,
-      "components": {
-        "field_coverage": 1.0,
-        "leader_quality": 1.0,
-        "source_coverage": 0.75,
-        "fetch_health": 1.0,
-        "llm_self": 0.55
-      }
-    },
-    "pages": [
-      {
-        "url": "https://supabase.com/",
-        "kind": "home",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 545265,
-        "clean_tokens": 537,
-        "discovered_by": "seed"
-      },
-      {
-        "url": "https://supabase.com/contribute/about",
-        "kind": "about",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 69248,
-        "clean_tokens": 553,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/pricing",
-        "kind": "pricing",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 161836,
-        "clean_tokens": 3200,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/careers",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 349661,
-        "clean_tokens": 500,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/contact/sales",
-        "kind": "contact",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 41919,
-        "clean_tokens": 72,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/company",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 68220,
-        "clean_tokens": 443,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/support",
-        "kind": "contact",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 39723,
-        "clean_tokens": 107,
-        "discovered_by": "sitemap"
-      }
-    ],
-    "errors": [],
-    "usage": {
-      "input_tokens": 6583,
-      "output_tokens": 346,
-      "llm_calls": 1,
-      "search_calls": 5,
-      "est_cost_usd": 0.04239,
-      "by_component": {
-        "extraction": 0.00239,
-        "search": 0.04
-      }
-    },
-    "duration_s": 15.740640541000175,
-    "scraped_at": "2026-09-17T10:25:27.269894+00:00"
-  },
-  {
-    "domain": "vapi.ai",
-    "status": "ok",
-    "profile": {
-      "company_name": "Vapi",
-      "overview": "Vapi is a platform for building, testing, and deploying AI voice agents, handling orchestration, telephony, and real-time monitoring so teams can go from prompt to production quickly. It offers enterprise-grade capabilities including SSO, RBAC, guardrails, and compliance with SOC 2, HIPAA, and PCI standards.",
-      "target_audience": "Developers and enterprises building and scaling AI voice agents for customer support and inbound call handling.",
-      "industries": [
-        "Artificial Intelligence",
-        "Developer Tools",
-        "Customer Support",
-        "Enterprise Software",
-        "Telecommunications"
-      ],
-      "contact_emails": [
-        {
-          "email": "talent@vapi.ai",
-          "purpose": "careers",
-          "source_url": "https://vapi.ai/careers"
-        },
-        {
-          "email": "support@vapi.ai",
-          "purpose": "support",
-          "source_url": "https://vapi.ai/support"
-        },
-        {
-          "email": "privacy@vapi.ai",
-          "purpose": "privacy",
-          "source_url": "https://security.vapi.ai"
-        }
-      ],
-      "leaders": [
-        {
-          "name": "Jordan Dearsley",
-          "title": "CEO and Co-Founder",
-          "linkedin_url": "https://www.linkedin.com/in/jordandearsley",
-          "linkedin_source": "search",
-          "source_url": "https://www.linkedin.com/posts/nikhilro_ivrs-are-dying-jordan-dearsley-ceo-and-activity-7315040779452715018-hOiI",
-          "verified": true
-        },
-        {
-          "name": "Nikhil Gupta",
-          "title": "Founder, CTO",
-          "linkedin_url": "https://www.linkedin.com/in/nikhilro",
-          "linkedin_source": "search",
-          "source_url": "https://www.linkedin.com/posts/nikhilro_ivrs-are-dying-jordan-dearsley-ceo-and-activity-7315040779452715018-hOiI",
-          "verified": true
-        }
-      ]
-    },
-    "confidence": {
-      "score": 0.84,
-      "components": {
-        "field_coverage": 1.0,
-        "leader_quality": 1.0,
-        "source_coverage": 0.75,
-        "fetch_health": 0.8571428571428571,
-        "llm_self": 0.5
-      }
-    },
-    "pages": [
-      {
-        "url": "https://vapi.ai/",
-        "kind": "home",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 2098214,
-        "clean_tokens": 467,
-        "discovered_by": "seed"
-      },
-      {
-        "url": "https://vapi.ai/careers",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 236189,
-        "clean_tokens": 457,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://vapi.ai/pricing",
-        "kind": "pricing",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 97182,
-        "clean_tokens": 679,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://vapi.ai/sales",
-        "kind": "contact",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 151493,
-        "clean_tokens": 55,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://vapi.ai/support",
-        "kind": "contact",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 103624,
-        "clean_tokens": 334,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://docs.vapi.ai/support",
-        "kind": "contact",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 307845,
-        "clean_tokens": 332,
-        "discovered_by": "anchor"
-      },
-      {
-        "url": "https://vapi.ai/team",
-        "kind": "team",
-        "status": "not_found",
-        "http_status": 404,
-        "raw_tokens": null,
-        "clean_tokens": null,
-        "discovered_by": "guess"
-      }
-    ],
-    "errors": [
-      {
-        "stage": "fetcher",
-        "kind": "http_404",
-        "message": "HTTP 404 for https://vapi.ai/team",
-        "url": "https://vapi.ai/team"
-      }
-    ],
-    "usage": {
-      "input_tokens": 3531,
-      "output_tokens": 368,
-      "llm_calls": 1,
-      "search_calls": 4,
-      "est_cost_usd": 0.033501,
-      "by_component": {
-        "extraction": 0.001501,
-        "search": 0.032
-      }
-    },
-    "duration_s": 18.38466412499838,
-    "scraped_at": "2026-09-17T10:25:29.914972+00:00"
-  },
-  {
     "domain": "postman.com",
     "status": "ok",
     "profile": {
       "company_name": "Postman",
-      "overview": "Postman is an API platform for building, testing, managing, and distributing APIs, now positioned as an AI-native API platform with an AI Engineer that automates API work. It offers an API client, specs, mock servers, monitoring, Flows, and governance features across Free, Solo, Team, and Enterprise plans.",
-      "target_audience": "Software developers, QA/test engineers, and enterprise API teams building, testing, and governing APIs.",
+      "overview": "Postman is an API platform for building, testing, managing, and distributing APIs, now positioned as an AI-native API platform with an AI Engineer that handles API work across an organization. It offers an API client and core tools, mock servers, monitoring, Flows automation, and enterprise governance capabilities across Free, Solo, Team, and Enterprise plans.",
+      "target_audience": "Software developers, QA/test engineers, and enterprise API teams building, testing, and governing APIs",
       "industries": [
         "Software",
+        "Information Technology",
         "Developer Tools",
-        "API Management",
-        "Enterprise SaaS"
+        "Enterprise Software"
       ],
       "contact_emails": [
         {
@@ -358,12 +36,7 @@
         {
           "email": "security@postman.com",
           "purpose": "security",
-          "source_url": "https://postman.com/security/vulnerability-reporting"
-        },
-        {
-          "email": "sales@postman.com",
-          "purpose": "sales",
-          "source_url": "https://www.postman.com/legal/archives/eula-03312021"
+          "source_url": "https://www.postman.com/security"
         }
       ],
       "leaders": [
@@ -394,13 +67,13 @@
       ]
     },
     "confidence": {
-      "score": 0.95,
+      "score": 0.97,
       "components": {
         "field_coverage": 1.0,
         "leader_quality": 1.0,
         "source_coverage": 1.0,
         "fetch_health": 1.0,
-        "llm_self": 0.75
+        "llm_self": 0.85
       }
     },
     "pages": [
@@ -409,7 +82,7 @@
         "kind": "home",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 100161,
+        "raw_tokens": 100185,
         "clean_tokens": 73,
         "discovered_by": "seed"
       },
@@ -427,7 +100,7 @@
         "kind": "pricing",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 301391,
+        "raw_tokens": 301194,
         "clean_tokens": 10,
         "discovered_by": "anchor"
       },
@@ -454,7 +127,7 @@
         "kind": "team",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 301391,
+        "raw_tokens": 301194,
         "clean_tokens": 10,
         "discovered_by": "guess"
       },
@@ -463,7 +136,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 85084,
+        "raw_tokens": 85059,
         "clean_tokens": 98,
         "discovered_by": "anchor"
       }
@@ -471,16 +144,16 @@
     "errors": [],
     "usage": {
       "input_tokens": 7210,
-      "output_tokens": 580,
+      "output_tokens": 590,
       "llm_calls": 1,
       "search_calls": 5,
-      "est_cost_usd": 0.042859,
+      "est_cost_usd": 0.042871,
       "by_component": {
-        "extraction": 0.002859,
+        "extraction": 0.002871,
         "search": 0.04
       }
     },
-    "duration_s": 42.05809125000087,
-    "scraped_at": "2026-09-17T10:25:53.585839+00:00"
+    "duration_s": 34.84741633399972,
+    "scraped_at": "2026-09-17T11:27:03.429344+00:00"
   }
 ]
