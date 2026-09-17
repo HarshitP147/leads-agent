@@ -12,6 +12,7 @@ import random
 import re
 import time
 from typing import TYPE_CHECKING, Literal
+from urllib.parse import urlparse
 
 from playwright.async_api import (
     Browser,
@@ -66,6 +67,9 @@ BOT_WALL_MARKERS = (
     "access denied",
 )
 _TAG_RE = re.compile(r"<[^>]+>")
+_SCRIPT_STYLE_RE = re.compile(
+    r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL
+)
 _DNS_ERROR_MARKERS = ("ERR_NAME_NOT_RESOLVED", "ERR_NAME_RESOLUTION_FAILED")
 _EMPTY_OR_CONN_MARKERS = (
     "ERR_EMPTY_RESPONSE",
@@ -205,6 +209,15 @@ async def close_browser() -> None:
 # --- Bot-wall detection -------------------------------------------------------------
 
 
+def _visible_text_len(html: str) -> int:
+    """Length of the text a human would actually see. Stripping only tags (not the
+    contents of `<script>`/`<style>`) badly overcounts a JS-heavy interstitial — a
+    Cloudflare "Just a moment..." challenge page is mostly obfuscated inline JS, which
+    survives tag-stripping and can push `visible_len` well past 300 chars even though
+    almost nothing is visible. Drop script/style bodies first."""
+    return len(_TAG_RE.sub(" ", _SCRIPT_STYLE_RE.sub(" ", html)))
+
+
 def _looks_like_bot_wall(http_status: int | None, html: str, title: str) -> bool:
     """See docs/design-docs/discovery-and-cleaning.md, Bot-wall detection."""
     haystack = f"{title}\n{html}".lower()
@@ -212,11 +225,10 @@ def _looks_like_bot_wall(http_status: int | None, html: str, title: str) -> bool
         marker in haystack for marker in BOT_WALL_MARKERS
     ):
         return True
-    if any(marker in title.lower() for marker in BOT_WALL_MARKERS):
-        visible_len = len(_TAG_RE.sub(" ", html))
-        if visible_len < 300:
-            return True
-    return False
+    return (
+        any(marker in title.lower() for marker in BOT_WALL_MARKERS)
+        and _visible_text_len(html) < 300
+    )
 
 
 # --- Navigation with retries ---------------------------------------------------------
@@ -358,6 +370,30 @@ def _classify_navigation_error(exc: Exception) -> str:
 
 def _is_empty_or_connection_kind(kind: str) -> bool:
     return kind == "empty_response"
+
+
+def _registrable_host(host: str) -> str:
+    return host.lower().removeprefix("www.").rstrip(".")
+
+
+def _redirect_update(domain: str, fetched: FetchedPage) -> dict:
+    """If the homepage navigation landed on a different registrable domain (e.g.
+    `twitter.com` -> `x.com`), adopt the final domain as the site's identity for the
+    rest of the run: `discover_links`'s same-site filter and `fetch_subpages`'s guessed
+    URLs both read `state["domain"]`, so anchoring it here — not the originally
+    requested domain — is what keeps discovery from treating the real site's own links
+    as off-site. Recorded in `route_log` so the switch is visible, not silent."""
+    if fetched.status != "ok":
+        return {}
+    final_host = urlparse(fetched.url).hostname or ""
+    final_registrable = _registrable_host(final_host)
+    requested_registrable = _registrable_host(domain)
+    if not final_registrable or final_registrable == requested_registrable:
+        return {}
+    return {
+        "domain": final_registrable,
+        "route_log": [f"fetch_home:redirected {domain}->{final_registrable}"],
+    }
 
 
 def _candidate_home_urls(domain: str) -> list[str]:
@@ -504,6 +540,7 @@ async def fetch_home(state: DomainState) -> dict:
                 "pages": [fetched],
                 "base_url": fetched.url,
                 "errors": errors,
+                **_redirect_update(domain, fetched),
             }
         except Exception as exc:
             kind = _classify_navigation_error(exc)

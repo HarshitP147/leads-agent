@@ -7,6 +7,7 @@ See docs/ARCHITECTURE.md (top-level shape) and docs/design-docs/resilience.md
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -14,19 +15,59 @@ import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from enrich import fetcher, pipeline
-from enrich.config import get_settings
+from enrich.config import get_settings, validate_settings
 from enrich.logging_setup import configure_logging
 from enrich.models import ConfidenceBreakdown, DomainResult, ErrorRecord, Usage
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 console = Console()
 logger = logging.getLogger(__name__)
+
+_RESERVED_HOSTS = frozenset({"localhost"})
+
+
+def normalize_domain(raw: str) -> str | None:
+    """CLI input hygiene: accept a bare domain or a full URL and reduce it to a bare,
+    lowercase, `www.`-stripped registrable host — `https://Supabase.com/pricing/` ->
+    `supabase.com`. Returns None (reject) for a non-http(s) scheme, `localhost`, or a
+    loopback/private/link-local/reserved IP literal — none of those are fetchable
+    company domains, and letting them through would either crash the fetcher or point it
+    at something other than a public company site."""
+    raw = raw.strip()
+    if not raw:
+        return None
+    if "://" in raw:
+        scheme = raw.split("://", 1)[0].lower()
+        if scheme not in ("http", "https"):
+            return None
+        host = urlsplit(raw).hostname
+    else:
+        host = urlsplit(f"//{raw}").hostname
+    if not host:
+        return None
+    host = host.removeprefix("www.").rstrip(".")
+    if not host or host in _RESERVED_HOSTS:
+        return None
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None and (
+        ip.is_loopback
+        or ip.is_private
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        return None
+    return host
 
 
 async def run_domain(
@@ -73,12 +114,46 @@ def _failed_result(domain: str, *, kind: str, message: str) -> DomainResult:
     )
 
 
+def _prepare_domains(raw_domains: list[str]) -> tuple[list[str], list[DomainResult]]:
+    """Normalize, validate, and dedupe (case-insensitive) input domains before any
+    fetching. A domain that fails to normalize becomes an immediate `failed`
+    DomainResult (AGENTS.md rule 3: a domain failing must never crash the run) instead
+    of being silently dropped or passed on to crash the fetcher; a domain that
+    normalizes to one already seen is dropped (one result per distinct domain)."""
+    valid: list[str] = []
+    seen: set[str] = set()
+    invalid: list[DomainResult] = []
+    for raw in raw_domains:
+        normalized = normalize_domain(raw)
+        if normalized is None:
+            invalid.append(
+                _failed_result(
+                    raw.strip(),
+                    kind="invalid_domain",
+                    message=f"could not normalize {raw!r} into a fetchable domain",
+                )
+            )
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        valid.append(normalized)
+    return valid, invalid
+
+
 async def run_all(
-    domains: list[str], *, out: Path, domain_timeout_s: int, debug: bool
+    domains: list[str],
+    *,
+    out: Path,
+    domain_timeout_s: int,
+    debug: bool,
+    initial_results: list[DomainResult] | None = None,
 ) -> tuple[list[DomainResult], dict[str, dict[str, list]]]:
     settings = get_settings()
     semaphore = asyncio.Semaphore(settings.max_concurrent_domains)
-    results: list[DomainResult] = []
+    results: list[DomainResult] = list(initial_results or [])
+    if results:
+        out.write_text(json.dumps([r.model_dump() for r in results], indent=2))
     debug_sink: dict[str, dict[str, list]] = {}
 
     async def _one(domain: str) -> None:
@@ -292,10 +367,21 @@ def main(
     if max_pages is not None:
         os.environ["MAX_PAGES_PER_DOMAIN"] = str(max_pages)
     settings = get_settings()
+    config_error = validate_settings(settings)
+    if config_error is not None:
+        console.print(f"[red]Config error:[/red] {config_error}")
+        raise typer.Exit(code=1)
+    domains, invalid_results = _prepare_domains(domains)
     domain_timeout_s = timeout or settings.domain_timeout_s
     wall_start = time.monotonic()
     results, debug_sink = asyncio.run(
-        run_all(domains, out=out, domain_timeout_s=domain_timeout_s, debug=debug)
+        run_all(
+            domains,
+            out=out,
+            domain_timeout_s=domain_timeout_s,
+            debug=debug,
+            initial_results=invalid_results,
+        )
     )
     wall_time_s = time.monotonic() - wall_start
     if debug:

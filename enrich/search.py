@@ -33,8 +33,17 @@ logger = logging.getLogger(__name__)
 SEARCH_DEPTH = "basic"
 SEARCH_TIMEOUT_S = 30
 MAX_RESULTS = 10
-MAX_LEADER_LOOKUPS = 5
+MAX_LEADER_LOOKUPS = 3
 MAX_DISCOVERED_LEADERS = 5
+# Cost control: münchen.de and mercadolibre.com each burned 6 Tavily calls (1 discovery
+# + 3 fallback + 2 email) for zero accepted results before this cap existed. `_search`
+# checks the shared budget synchronously before every call, so no code path — known-
+# leader enrichment, cold discovery, or email search — can exceed it for one domain.
+MAX_TAVILY_CALLS_PER_DOMAIN = 3
+# If the first EARLY_STOP_AFTER_EMPTY_QUERIES leader-discovery queries (the initial
+# broad query plus fallbacks) all come back with zero accepted role evidence, stop
+# spending the remaining budget on more fallback queries for this domain.
+EARLY_STOP_AFTER_EMPTY_QUERIES = 2
 
 _NAME_TOKEN = r"[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’\-]+"
 _PERSON_NAME = rf"{_NAME_TOKEN}(?:[ \t]+{_NAME_TOKEN}){{1,3}}?"
@@ -80,6 +89,21 @@ class RoleEvidence:
     name: str
     title: str
     source_url: str
+
+
+class SearchBudget:
+    """Shared, per-domain Tavily call budget. `try_acquire` is synchronous and called
+    before the first `await` in `_search`, so concurrent callers on the same event loop
+    can't race past the limit — asyncio only switches tasks at an `await` point."""
+
+    def __init__(self, limit: int = MAX_TAVILY_CALLS_PER_DOMAIN) -> None:
+        self.remaining = limit
+
+    def try_acquire(self) -> bool:
+        if self.remaining <= 0:
+            return False
+        self.remaining -= 1
+        return True
 
 
 def _normalise(value: str) -> str:
@@ -183,7 +207,12 @@ async def _search(
     *,
     include_domains: list[str],
     raw_content: bool = False,
+    budget: SearchBudget | None = None,
 ) -> SearchOutcome:
+    if budget is not None and not budget.try_acquire():
+        return SearchOutcome(
+            results=[], event=UsageEvent(component="search", search_calls=0)
+        )
     event = UsageEvent(component="search", search_calls=1, estimated=True)
     try:
         response = await client.search(
@@ -232,6 +261,7 @@ async def _enrich_known_leaders(
     leaders: list[Leader],
     company_name: str,
     aliases: set[str],
+    budget: SearchBudget,
 ) -> tuple[list[Leader], list[SearchOutcome]]:
     missing = [leader for leader in leaders if not leader.linkedin_url][
         :MAX_LEADER_LOOKUPS
@@ -241,6 +271,7 @@ async def _enrich_known_leaders(
             client,
             _leader_query(leader, company_name),
             include_domains=["linkedin.com"],
+            budget=budget,
         )
         for leader in missing
     ]
@@ -254,31 +285,43 @@ async def _enrich_known_leaders(
 
 
 async def _discover_leaders(
-    client: AsyncTavilyClient, company_name: str, aliases: set[str]
+    client: AsyncTavilyClient,
+    company_name: str,
+    aliases: set[str],
+    budget: SearchBudget,
 ) -> tuple[list[Leader], list[SearchOutcome]]:
     outcome = await _search(
         client,
         _discovery_query(company_name),
         include_domains=["linkedin.com"],
+        budget=budget,
     )
     outcomes = [outcome]
     roles = _role_evidence(outcome.results, aliases)
+    empty_streak = 0 if roles else 1
     missing_roles = [
         name
         for result in outcome.results
         if (name := _profile_name(result, aliases)) is not None
         and _normalise(name) not in roles
     ][:3]
-    fallback_tasks = [
-        _search(
+    # Sequential, not gathered: each fallback query's result decides whether the next
+    # one is worth running at all (see EARLY_STOP_AFTER_EMPTY_QUERIES) — münchen.de and
+    # mercadolibre.com used to burn all 3 fallback calls even after the very first two
+    # queries came back with nothing.
+    for name in missing_roles:
+        if empty_streak >= EARLY_STOP_AFTER_EMPTY_QUERIES or budget.remaining <= 0:
+            break
+        fallback_outcome = await _search(
             client,
             f'LinkedIn profile for "{name}", founder or executive at "{company_name}"',
             include_domains=["linkedin.com"],
+            budget=budget,
         )
-        for name in missing_roles
-    ]
-    if fallback_tasks:
-        outcomes.extend(await asyncio.gather(*fallback_tasks))
+        outcomes.append(fallback_outcome)
+        empty_streak = (
+            0 if _role_evidence(fallback_outcome.results, aliases) else empty_streak + 1
+        )
     combined = [result for item in outcomes for result in item.results]
     roles = _role_evidence(combined, aliases)
     leaders: list[Leader] = []
@@ -302,9 +345,16 @@ async def _discover_leaders(
 
 
 def _is_target_url(url: str, domain: str) -> bool:
+    """Exact-host match only (no subdomain allowance): a "public contact email" must
+    come from the company's own primary site, not an arbitrary subdomain. This is
+    stricter than `_same_site` on purpose — amazon.com's live search results included a
+    `sellercentral.amazon.com` community forum thread with ~10 pasted addresses
+    (including a bare `jeff@amazon.com`) that are not verifiable as genuine official
+    contacts; a forum subdomain is not the target company's own published contact
+    page, even though it shares the registrable domain."""
     host = (urlparse(url).hostname or "").lower().removeprefix("www.")
     target = domain.lower().removeprefix("www.")
-    return host == target or host.endswith(f".{target}")
+    return host == target
 
 
 def _company_email(address: str, domain: str, aliases: set[str]) -> bool:
@@ -362,6 +412,7 @@ async def _search_emails(
     domain: str,
     company_name: str,
     aliases: set[str],
+    budget: SearchBudget,
 ) -> tuple[list[ContactEmail], list[SearchOutcome]]:
     queries = (
         f'Public contact support and sales email addresses for "{company_name}" ({domain})',
@@ -369,7 +420,13 @@ async def _search_emails(
     )
     outcomes = await asyncio.gather(
         *(
-            _search(client, query, include_domains=[domain], raw_content=True)
+            _search(
+                client,
+                query,
+                include_domains=[domain],
+                raw_content=True,
+                budget=budget,
+            )
             for query in queries
         )
     )
@@ -393,16 +450,23 @@ async def _run_searches(
     company_name: str,
     aliases: set[str],
 ) -> tuple[list[Leader], list[ContactEmail], list[SearchOutcome]]:
-    email_task = _search_emails(client, domain, company_name, aliases)
+    """Email search runs first and always gets its fixed 2 calls (cheap, always useful);
+    whatever's left of MAX_TAVILY_CALLS_PER_DOMAIN goes to leader work. Sequential, not
+    concurrent — the budget has to be enforced in a fixed priority order, and email vs.
+    leader calls are cheap enough that giving up the (small) concurrency win is worth the
+    predictability."""
+    budget = SearchBudget()
+    emails, email_outcomes = await _search_emails(
+        client, domain, company_name, aliases, budget
+    )
     if state.get("leaders"):
-        leader_task = _enrich_known_leaders(
-            client, state.get("leaders", []), company_name, aliases
+        leaders, leader_outcomes = await _enrich_known_leaders(
+            client, state.get("leaders", []), company_name, aliases, budget
         )
     else:
-        leader_task = _discover_leaders(client, company_name, aliases)
-    (leaders, leader_outcomes), (emails, email_outcomes) = await asyncio.gather(
-        leader_task, email_task
-    )
+        leaders, leader_outcomes = await _discover_leaders(
+            client, company_name, aliases, budget
+        )
     return leaders, emails, [*leader_outcomes, *email_outcomes]
 
 

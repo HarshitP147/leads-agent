@@ -105,7 +105,7 @@ Runs deterministically after extraction.
 Runs after deterministic website verification and uses Tavily basic search. Responses
 are parsed through a Pydantic model before the evidence rules run.
 
-- For each website-verified leader without a URL (max 5), run a company/role-scoped
+- For each website-verified leader without a URL (max 3), run a company/role-scoped
   LinkedIn query. Keep only a direct `/in/` result whose title or URL slug identifies
   that person, and require separate result evidence that names their leadership role
   at the target company. This prevents a snippet mentioning several people from
@@ -113,11 +113,29 @@ are parsed through a Pydantic model before the evidence rules run.
 - If the website yields no leaders, run one broad founder/CEO/CTO query and up to three
   focused follow-ups for named profiles whose role is initially missing. A discovered
   leader needs the same direct-profile, identity, company, and role corroboration.
-- In parallel, run two target-domain-filtered searches for public contact and sensitive
-  inboxes. Accept only literal, non-junk addresses found in result/raw text from a URL
-  on the target domain; a same-brand legacy email domain (for example `supabase.io`) is
-  allowed. Never construct or infer an address. Merge with website-harvested emails.
+- Two target-domain-filtered searches run for public contact and sensitive inboxes.
+  Accept only literal, non-junk addresses found in result/raw text from a URL whose
+  host is *exactly* the target's bare/`www.` domain — not an arbitrary subdomain. This
+  is stricter than the same-site rule used elsewhere: a live amazon.com run pulled ~10
+  addresses (including a bare `jeff@amazon.com`) out of a `sellercentral.amazon.com`
+  community-forum thread, which shares the registrable domain but is not Amazon's own
+  published contact page and can't be trusted as a genuine official address. A
+  same-brand legacy email domain (for example `supabase.io`) is still allowed via the
+  company-alias check. Never construct or infer an address. Merge with
+  website-harvested emails.
+- **Call budget (`SearchBudget`, `MAX_TAVILY_CALLS_PER_DOMAIN=3`):** every `_search`
+  call acquires from one shared, per-domain budget before hitting the network, checked
+  synchronously so concurrent callers can't overshoot it. Email search runs first
+  (sequentially, not concurrently with leader work) and always gets its fixed 2 calls;
+  whatever's left goes to leader enrichment/discovery. Separately, the discovery
+  fallback loop (`_discover_leaders`) stops issuing further fallback queries once
+  `EARLY_STOP_AFTER_EMPTY_QUERIES=2` queries in a row (initial + fallback) produced zero
+  accepted role evidence. Before this existed, a domain with no real leadership content
+  (e.g. münchen.de, a municipal site; mercadolibre.com) could burn 6 calls — 1 discovery
+  + 3 fallback + 2 email — for zero accepted results.
 - Each attempted call emits `UsageEvent(component="search", search_calls=1)`, including
-  a provider error, so the usage and failure are visible rather than lost.
+  a provider error, so the usage and failure are visible rather than lost. A call
+  skipped because the budget was already exhausted emits no usage event (no network
+  call was made).
 - No Tavily key → skip silently with a `route_log` entry, not an error.
 - Never fetch linkedin.com pages.

@@ -13,6 +13,22 @@
   failure (permanent — the domain doesn't exist, retrying can't fix that).
 - For a 429, respect `Retry-After` if present (cap at 10 s).
 - Normalise input: strip scheme/paths, try `https://{domain}` then `https://www.{domain}`.
+  (CLI-level normalisation — full URL -> bare host, IP/localhost rejection — happens
+  earlier, in `cli.normalize_domain`; see resilience.md, "Input hygiene".)
+
+### Cross-domain redirects (e.g. `twitter.com` -> `x.com`)
+
+If the homepage navigation lands on a different registrable domain than requested,
+`fetch_home._redirect_update` adopts the final domain as `state["domain"]` and logs
+`fetch_home:redirected <old>-><new>` to `route_log`. This matters because
+`discover_links`'s same-site filter and `fetch_subpages`'s guessed URLs both read
+`state["domain"]` — without this, a legitimately redirected site's own homepage anchors
+would be filtered out as "off-site" against the stale, pre-redirect domain. A plain
+`www.` redirect is not treated as a domain change (registrable host is compared after
+stripping `www.`). Known trade-off: `fetch_subpages` still keys its browser context
+cache by the (now-stale) original domain, so a redirect costs one extra `BrowserContext`
+for the rest of that domain's fetches — harmless, just not maximally efficient (see
+tech-debt.md).
 
 ### Settling the page (16 Sep, profiling follow-up)
 
@@ -49,6 +65,13 @@ Mark `status="blocked"` when any holds:
 On blocked: wait 3–5 s once and reload (JS challenges sometimes auto-resolve). If still
 blocked, record `ErrorRecord(kind="bot_wall")` and continue with whatever else we have.
 **We do not attempt CAPTCHA solving or stealth plugins.** State this in the README.
+
+The 300-char "visible text" check strips `<script>`/`<style>` *bodies*, not just tags
+(`fetcher._visible_text_len`) — a Cloudflare-style interstitial that returns HTTP 200
+(a JS-redirect challenge, not a 403/503) is mostly obfuscated inline JS, which survived
+tag-only stripping and could push the visible-length count well past 300 even though a
+human would see almost nothing. Only stripping tags undercounted the challenge as a
+normal page in that case.
 
 ## Discovery (`discovery.py`)
 

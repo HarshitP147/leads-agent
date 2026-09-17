@@ -21,7 +21,25 @@ Goal: the run always finishes and always writes `output.json`, even if every dom
 
 `dns_error`, `timeout`, `http_404`, `http_4xx`, `http_5xx`, `rate_limited`, `bot_wall`,
 `empty_content`, `empty_response`, `sitemap_error`, `agent_error`, `llm_error`,
-`parse_error`, `unverified_person`, `search_error`, `internal`.
+`parse_error`, `unverified_person`, `search_error`, `invalid_domain`, `internal`.
+
+`invalid_domain` (`cli.py`, stage `"cli"`): the input string didn't normalize to a
+fetchable domain — a non-http(s) scheme, `localhost`, or a loopback/private/link-local
+IP literal. Produced by `_prepare_domains` before any fetching starts, as an immediate
+`failed` `DomainResult`, exactly like any other per-domain failure — one bad entry in a
+domain list must not stop the rest from running.
+
+## Input hygiene (`cli.py`)
+
+Before any domain is fetched: `normalize_domain` strips scheme/`www.`/path/query/
+trailing slash and lowercases (`https://Supabase.com/pricing/` -> `supabase.com`),
+rejecting `localhost` and loopback/private/link-local/reserved IPs; `_prepare_domains`
+then dedupes case-insensitively (first occurrence wins) and turns anything that fails
+to normalize into an `invalid_domain` failure rather than passing it to the fetcher.
+Separately, `config.validate_settings` checks the configured LLM provider's API key
+(and `DEEPSEEK_BASE_URL`'s scheme) once at startup — before any fetching — so a missing
+key fails fast with one message naming the env var and `.env.example`, instead of every
+domain independently discovering the same `llm_error` after paying for a fetch.
 
 `empty_response` is a Playwright navigation failure (`ERR_EMPTY_RESPONSE`, connection
 reset/refused/closed). `ErrorRecord.message` is one line (first line, capped); the full

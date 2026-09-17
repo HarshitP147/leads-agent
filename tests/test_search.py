@@ -224,3 +224,133 @@ async def test_one_search_failure_becomes_an_error_and_usage_event() -> None:
     assert outcome.error is not None
     assert outcome.error.kind == "search_error"
     assert outcome.event.search_calls == 1
+
+
+def test_email_from_unofficial_subdomain_is_rejected() -> None:
+    """Regression for a live amazon.com run: search results included a
+    sellercentral.amazon.com community-forum thread containing ~10 pasted addresses
+    (one a bare `jeff@amazon.com`) that are not verifiable as genuine official Amazon
+    contacts. A forum/community subdomain is not the target company's own published
+    contact page, even though it shares the registrable domain."""
+    results = [
+        search.TavilyResult(
+            title="Seller forum thread",
+            url="https://sellercentral.amazon.com/seller-forums/discussions/t/123",
+            content="",
+            raw_content="jeff@amazon.com copyright@amazon.com",
+        ),
+        search.TavilyResult(
+            title="Contact Amazon",
+            url="https://www.amazon.com/gp/help/customer/contact-us",
+            content="",
+            raw_content="press@amazon.com",
+        ),
+    ]
+    emails = search._emails_from_results(results, "amazon.com", {"amazon"})
+    assert {item.email for item in emails} == {"press@amazon.com"}
+
+
+class _CountingLinkedInClient:
+    """Every call returns the same 3 named LinkedIn profiles that mention the target
+    company but never satisfy `_role_evidence` (no role verb) — designed so the only
+    thing that can end the fallback loop is the early-stop / budget logic under test,
+    not a lucky match."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.no_role_results = [
+            {
+                "title": "Jordan Alpha",
+                "url": "https://www.linkedin.com/in/jordan-alpha",
+                "content": "Jordan Alpha works at Acme.",
+            },
+            {
+                "title": "Taylor Beta",
+                "url": "https://www.linkedin.com/in/taylor-beta",
+                "content": "Taylor Beta works at Acme.",
+            },
+            {
+                "title": "Casey Gamma",
+                "url": "https://www.linkedin.com/in/casey-gamma",
+                "content": "Casey Gamma works at Acme.",
+            },
+        ]
+
+    async def search(self, query: str, **kwargs: object) -> dict:
+        self.calls.append(query)
+        return {"results": self.no_role_results}
+
+
+@pytest.mark.asyncio
+async def test_discover_leaders_stops_after_two_empty_queries() -> None:
+    """A large budget is deliberately given so the early-stop rule — not the budget —
+    is what ends the loop: 1 initial query + 1 fallback (both empty) must stop it
+    before a 3rd, even though 2 more missing_roles candidates and 8 more budget units
+    remain."""
+    client = _CountingLinkedInClient()
+    budget = search.SearchBudget(limit=10)
+
+    await search._discover_leaders(client, "Acme", {"acme"}, budget)
+
+    assert len(client.calls) == 2
+    assert budget.remaining == 8
+
+
+class _AlwaysHitLinkedInClient:
+    """Every LinkedIn query returns a fresh, fully-corroborated role match — early-stop
+    never fires — so only MAX_TAVILY_CALLS_PER_DOMAIN can be bounding the call count."""
+
+    def __init__(self) -> None:
+        self.linkedin_calls = 0
+        self.email_calls = 0
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
+
+    async def search(self, query: str, **kwargs: object) -> dict:
+        if kwargs.get("include_domains") == ["linkedin.com"]:
+            self.linkedin_calls += 1
+            n = self.linkedin_calls
+            return {
+                "results": [
+                    {
+                        "title": f"Jordan Founder{n}",
+                        "url": f"https://www.linkedin.com/in/jordan-founder-{n}",
+                        "content": f"Jordan Founder{n} Co-Founder & CEO at Acme.",
+                    }
+                ]
+            }
+        self.email_calls += 1
+        return {"results": []}
+
+
+@pytest.mark.asyncio
+async def test_search_linkedin_never_exceeds_the_tavily_call_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """münchen.de and mercadolibre.com each burned 6 Tavily calls (1 discovery + 3
+    fallback + 2 email) for zero accepted results before the shared budget existed.
+    Here every query succeeds (so early-stop never triggers), proving the 3-call cap
+    itself — not a lucky early stop — is what bounds the total."""
+    client = _AlwaysHitLinkedInClient()
+    monkeypatch.setattr(search, "AsyncTavilyClient", lambda api_key: client)
+    monkeypatch.setattr(
+        search, "get_settings", lambda: Settings(tavily_api_key="test-key")
+    )
+    extraction = LLMExtraction(
+        company_name="Acme",
+        overview="Acme builds widgets. It sells them online.",
+        target_audience="Developers.",
+        industries=["software"],
+        self_confidence=0.5,
+    )
+    state = {"domain": "acme.example", "extraction": extraction, "leaders": []}
+
+    await search.search_linkedin(state)
+
+    assert (
+        client.linkedin_calls + client.email_calls == search.MAX_TAVILY_CALLS_PER_DOMAIN
+    )

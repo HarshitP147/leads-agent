@@ -639,6 +639,102 @@ turning snippets into unverified facts. Every basic search is costed and failure
 per call. The live three-domain run produced 7/7 leader LinkedIn URLs, 19 public emails,
 14 Tavily calls, and a $0.118750 combined estimated cost; exact results are in QUALITY.md.
 
+2026-09-17 — Manual-testing follow-up: 8 real gaps fixed — Ordered by the review request.
+
+**1. Test-coverage audit.** Confirmed the flagged gap live: commenting out the
+`PREFERRED_LEADER_KINDS` check in `verify._name_on_preferred_pages` (forcing it to
+always return `False`) left all 9 `test_verify.py` tests passing — every existing
+fixture that exercises that path already has a professional title or personal-site
+signal, so the fallback path masked the missing check. Mutation-tested every other
+meaningful branch in `verify.py`/`scoring.py` the same way (temporarily broke it, ran
+the suite, confirmed something failed, restored from the in-memory source string —
+**never** `git checkout`, which discards real uncommitted edits along with a
+mutation — learned that the hard way on `fetcher.py` mid-session and had to redo the
+redirect/bot-wall fixes). Branches with **no covering test before this pass**:
+`verify._name_on_preferred_pages`'s own check (the flagged one); `_linkedin_kept`'s
+page-markdown fallback (only the `linkedin_links` path was tested); `_foreign_company_
+in_title`'s "title names the target company itself" branch (only "no separator" and
+"names a different company" were tested); `_personal_site_subject`'s company-name-match
+and owner-marker branches (both existing fixtures reached `True` via the domain-match
+branch first, short-circuiting before reaching them); `two_sentences`'s single-sentence
+passthrough. In `scoring.py`: **every** partial-credit branch — `_field_coverage`,
+`_leader_quality`, `_source_coverage`, `_fetch_health` all only had "all true" (via the
+"perfect state" fixture) or "all false" (via "no extraction") fixtures, never a mixed
+case; the `UNVERIFIED_PENALTY_CAP` ceiling (only a single drop, never enough to hit the
+cap); and `home is None` (the key absent) vs. `home.status != "ok"` (present but
+failed) — only the latter was tested, and they're different `DomainState` shapes. Added
+16 tests across `test_verify.py`/`test_scoring.py`, one per gap, each confirmed to fail
+under the corresponding mutation and pass on the real code.
+
+**2. Fail-fast config.** `config.validate_settings` checks the configured LLM
+provider's API key (naming the exact env var + pointing at `.env.example`) and
+`DEEPSEEK_BASE_URL`'s scheme once at CLI startup, before any fetching — previously a
+missing key was only discovered per-domain, inside `extract`, after a homepage fetch
+had already run for nothing.
+
+**3+4. Domain input hygiene.** `cli.normalize_domain`: full URL or bare domain ->
+lowercase, `www.`-stripped bare host (`https://Supabase.com/pricing/` ->
+`supabase.com`); rejects `localhost` and loopback/private/link-local/reserved IPs and
+non-http(s) schemes. `cli._prepare_domains` dedupes case-insensitively (first
+occurrence wins) and turns anything that fails to normalize into an immediate
+`invalid_domain` `failed` result (new `ErrorRecord.kind`, documented in resilience.md)
+instead of either crashing or being silently dropped.
+
+**5. Bot-wall / g2.com.** Live re-run of `g2.com` today classified correctly
+(`kind="bot_wall"`) — couldn't reproduce the exact live failure described (g2.com's
+PerimeterX/Cloudflare challenge type isn't stable across requests). Found and fixed a
+real related latent bug on read: `_looks_like_bot_wall`'s 300-char "visible text" check
+only stripped HTML tags, not `<script>`/`<style>` *contents* — a Cloudflare-style
+interstitial that returns HTTP 200 (JS-redirect flow, not 403/503) is mostly obfuscated
+inline JS that survives tag-stripping, which could push the count past 300 and misread
+the challenge as a normal page. `fetcher._visible_text_len` now strips script/style
+bodies first. New fixture in `test_bot_wall.py` (200-status, long inline `<script>`,
+short real body) fails on the old code, passes on the new.
+
+**6. Cross-domain redirects.** `fetcher._redirect_update`: if `fetch_home`'s navigation
+lands on a different registrable domain (`twitter.com` -> `x.com`), adopt the final
+domain as `state["domain"]` and log `fetch_home:redirected <old>-><new>` to
+`route_log`. Without this, `discover_links`'s same-site filter (which reads
+`state["domain"]`) would treat the redirected site's own homepage anchors as
+off-site, filtering out real content. A `www.`-only redirect is not treated as a
+domain change. `tests/test_redirect.py` (new) covers cross-domain, same-domain, and
+www-only cases with a stubbed `_fetch_one`.
+
+**7. Tavily call cap.** `search.SearchBudget`: a shared, synchronously-checked
+per-domain counter, `MAX_TAVILY_CALLS_PER_DOMAIN=3`. Email search runs first
+(sequential now, not concurrent with leader work, so budget priority is deterministic
+rather than dependent on asyncio scheduling order) and always gets its fixed 2 calls;
+leader enrichment/discovery gets whatever's left. `_discover_leaders`'s fallback loop
+also stops after `EARLY_STOP_AFTER_EMPTY_QUERIES=2` consecutive queries (initial +
+fallback) with zero accepted role evidence, rather than firing all 3 fallback queries
+regardless. Reproduced the described 6-call zero-result case's *shape* (1 discovery + 3
+fallback + 2 email); couldn't reproduce münchen.de/mercadolibre.com specifically without
+their exact original state, but the fix caps the exact call pattern that produces it.
+`MAX_LEADER_LOOKUPS` 5 -> 3 (the per-domain budget bounds it further regardless). New
+tests: budget caps total calls at 3 even when every query succeeds (proving the cap
+itself, not a lucky early-stop, is what bounds it); early-stop fires after 2 empty
+queries even with a large budget still available.
+
+**8. amazon.com search-sourced data.** Live re-run reproduced the described numbers
+exactly: 1 leader (Beth Galetti, Amazon's real SVP HR — genuine, sourced from
+aboutamazon.com, no issue) and 10 emails, **all** sourced from a single
+`sellercentral.amazon.com` seller-forum discussion thread (a community UGC page, not
+Amazon's own site) — including a bare `jeff@amazon.com`, which reads as pasted forum
+text, not a verifiable official contact. Root cause: `search._is_target_url` allowed
+any subdomain of the target's registrable domain (`host.endswith(f".{target}")`),
+so a forum subdomain passed the same check as `www.amazon.com`. Fixed to require an
+exact bare/`www.` host match for the email-search path only (leader/LinkedIn logic is
+unaffected — it already restricts to `linkedin.com`). New test replicates the exact
+amazon.com shape (forum-subdomain result + real contact-page result) and asserts only
+the latter's email survives.
+
+**Verification.** `uv run pytest -q`: 105 passed (up from 60). `ruff check`/`format
+--check` clean on `enrich/`+`tests/` (one pre-existing, unrelated `schemas.md` markdown
+formatting note from `ruff format --check .` predates this session, left alone).
+`python -m enrich supabase.com https://Supabase.com/pricing/ SUPABASE.COM` produced
+exactly one result for `supabase.com` (normalization + dedupe confirmed live, not just
+in unit tests).
+
 2026-09-17 16:57 — M4 failure-matrix rerun — Re-executed all six requested CLI cases
 one at a time; every process exited 0 and every generated `output.json` validated. The
 missing-Tavily marker existed in internal state but was invisible in normal CLI output,

@@ -9,15 +9,13 @@ from enrich.cleaner import CleanPage, TeamCard
 from enrich.discovery import FoundEmail, FoundLink
 from enrich.fetcher import FetchedPage
 from enrich.models import LLMEmail, LLMExtraction, LLMLeader
-from enrich.verify import verify
+from enrich.verify import two_sentences, verify
 
 PAGE_URL = "https://acme-corp.io/team"
 
 
-def _clean(text: str, *, url: str = PAGE_URL) -> CleanPage:
-    return CleanPage(
-        url=url, kind="team", markdown=text, raw_tokens=100, clean_tokens=20
-    )
+def _clean(text: str, *, url: str = PAGE_URL, kind: str = "team") -> CleanPage:
+    return CleanPage(url=url, kind=kind, markdown=text, raw_tokens=100, clean_tokens=20)
 
 
 def _leader(
@@ -57,10 +55,11 @@ def _state(
     emails: list[FoundEmail] | None = None,
     links: list[FoundLink] | None = None,
     cards: list[TeamCard] | None = None,
+    markdown_kind: str = "team",
 ) -> dict:
     return {
         "domain": "acme-corp.io",
-        "cleaned": [_clean(markdown)],
+        "cleaned": [_clean(markdown, kind=markdown_kind)],
         "candidate_emails": emails or [],
         "linkedin_links": links or [],
         "team_cards": cards or [],
@@ -286,6 +285,164 @@ async def test_personal_site_author_on_homepage_is_kept() -> None:
     ]
     update = await verify(state)
     assert [leader.name for leader in update["leaders"]] == ["Avery Writer"]
+
+
+@pytest.mark.asyncio
+async def test_team_page_member_without_title_is_kept() -> None:
+    """Regression for a real test gap: commenting out the PREFERRED_LEADER_KINDS check
+    in `_name_on_preferred_pages` (always returning False) still passed the whole suite
+    before this test existed. A person named on a `team`-kind page with no professional
+    title and no personal-site signal must be kept *because* they're on a preferred
+    page — if that check is disabled, `_homepage_leader_allowed` would wrongly demand a
+    title and drop them."""
+    extraction = _extraction([_leader("Priya Ops", title=None)])
+    state = _state(
+        extraction, "Priya Ops is part of our operations team.", markdown_kind="team"
+    )
+    update = await verify(state)
+    assert [leader.name for leader in update["leaders"]] == ["Priya Ops"]
+    assert update["errors"] == []
+
+
+@pytest.mark.asyncio
+async def test_team_card_grounds_name_without_title() -> None:
+    """Same gap, via the TEAM CARDS branch of `_name_on_preferred_pages` rather than
+    cleaned-page markdown."""
+    extraction = _extraction(
+        [_leader("Priya Ops", title=None, source_url="https://acme-corp.io/")]
+    )
+    state = _state(
+        extraction,
+        "Meet the team.",
+        markdown_kind="home",
+        cards=[TeamCard(name="Priya Ops", role=None, source_url=PAGE_URL)],
+    )
+    update = await verify(state)
+    assert [leader.name for leader in update["leaders"]] == ["Priya Ops"]
+
+
+@pytest.mark.asyncio
+async def test_homepage_only_member_without_title_is_dropped() -> None:
+    """Contrast case for the two tests above: the same person with no title and no
+    personal-site signal, found ONLY on the homepage (not a preferred kind, no team
+    card), must still be dropped."""
+    extraction = _extraction(
+        [_leader("Priya Ops", title=None, source_url="https://acme-corp.io/")]
+    )
+    state = _state(
+        extraction, "Priya Ops is part of our operations team.", markdown_kind="home"
+    )
+    update = await verify(state)
+    assert update["leaders"] == []
+    assert update["errors"][0].kind == "unverified_person"
+
+
+@pytest.mark.asyncio
+async def test_linkedin_kept_via_page_markdown_fallback() -> None:
+    """`_linkedin_kept` has two acceptance paths: the URL is in `linkedin_links`, or it
+    literally appears in some fetched page's cleaned markdown. Every other test in this
+    file only exercises the first path (via `links=`); this one has no `linkedin_links`
+    entry at all, so it can only pass through the markdown fallback."""
+    url = "https://www.linkedin.com/in/jane-founder"
+    extraction = _extraction([_leader("Jane Founder", linkedin_url=url)])
+    state = _state(
+        extraction,
+        f"Jane Founder is CEO. Find her at {url}.",
+    )
+    update = await verify(state)
+    assert update["leaders"][0].linkedin_url == url
+    assert update["leaders"][0].linkedin_source == "website"
+
+
+@pytest.mark.asyncio
+async def test_title_naming_target_company_is_not_foreign() -> None:
+    """`_foreign_company_in_title` must not drop a title just because it has a
+    separator — only when the part *after* the separator names a company that is not
+    the target. "CEO at Acme" (the target company itself) must be kept."""
+    extraction = _extraction([_leader("Jane Founder", title="CEO at Acme")])
+    state = _state(extraction, "Jane Founder, CEO at Acme, leads the company.")
+    update = await verify(state)
+    assert [leader.name for leader in update["leaders"]] == ["Jane Founder"]
+
+
+@pytest.mark.asyncio
+async def test_personal_site_subject_matches_via_company_name_alone() -> None:
+    """`_personal_site_subject` has three independent acceptance paths (domain match,
+    company_name match, owner-phrase match). This fixture defeats the first two ways to
+    reach True by any means BUT the company-name match: the domain doesn't contain the
+    person's name, and the markdown has no "I'm"/"about me"-style phrase."""
+    home = "https://flagship-studio.example/"
+    extraction = LLMExtraction(
+        company_name="Jordan Solo",
+        overview="Jordan Solo builds tools. This is a personal site.",
+        target_audience="Visitors.",
+        industries=["software"],
+        leaders=[_leader("Jordan Solo", title=None, source_url=home)],
+        self_confidence=0.6,
+    )
+    state = {
+        "domain": "flagship-studio.example",
+        "cleaned": [
+            CleanPage(
+                url=home,
+                kind="home",
+                markdown="Jordan Solo. Tools for developers.",
+                raw_tokens=20,
+                clean_tokens=10,
+            )
+        ],
+        "candidate_emails": [],
+        "linkedin_links": [],
+        "team_cards": [],
+        "extraction": extraction,
+        "errors": [],
+    }
+    update = await verify(state)
+    assert [leader.name for leader in update["leaders"]] == ["Jordan Solo"]
+
+
+@pytest.mark.asyncio
+async def test_personal_site_owner_marker_without_domain_or_company_match() -> None:
+    """Isolates the owner-marker branch of `_personal_site_subject`: neither the domain
+    nor `company_name` names the person, so only the "about me"-style phrase can allow
+    them through."""
+    home = "https://myportfolio.example/"
+    extraction = LLMExtraction(
+        company_name="My Portfolio",
+        overview="A personal portfolio site. It showcases projects.",
+        target_audience="Visitors.",
+        industries=["software"],
+        leaders=[_leader("Riley Quinn", title=None, source_url=home)],
+        self_confidence=0.6,
+    )
+    state = {
+        "domain": "myportfolio.example",
+        "cleaned": [
+            CleanPage(
+                url=home,
+                kind="home",
+                markdown="About me: I'm Riley Quinn, a software engineer.",
+                raw_tokens=20,
+                clean_tokens=10,
+            )
+        ],
+        "candidate_emails": [],
+        "linkedin_links": [],
+        "team_cards": [],
+        "extraction": extraction,
+        "errors": [],
+    }
+    update = await verify(state)
+    assert [leader.name for leader in update["leaders"]] == ["Riley Quinn"]
+
+
+def test_two_sentences_single_sentence_is_left_alone() -> None:
+    assert two_sentences("Acme builds widgets.") == "Acme builds widgets."
+
+
+def test_two_sentences_adds_missing_terminal_punctuation() -> None:
+    result = two_sentences("Acme builds widgets. Developers use them daily")
+    assert result == "Acme builds widgets. Developers use them daily."
 
 
 @pytest.mark.asyncio
