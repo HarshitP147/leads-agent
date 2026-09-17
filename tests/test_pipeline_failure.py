@@ -158,7 +158,11 @@ async def test_missing_tavily_key_notes_skip_in_route_log(
     monkeypatch.setattr(pipeline.extractor, "extract", noop)
     monkeypatch.setattr(pipeline.verify, "verify", noop)
     monkeypatch.setattr(pipeline.scoring, "score", noop)
-    monkeypatch.setattr(pipeline, "get_settings", lambda: Settings(tavily_api_key=None))
+    monkeypatch.setattr(
+        pipeline.search,
+        "get_settings",
+        lambda: Settings(tavily_api_key=None),
+    )
 
     state: dict = {"domain": "example.com", "started_at": 0.0}
     await pipeline._run_stages(state, debug_sink=None, domain="example.com")

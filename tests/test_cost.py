@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from enrich.cost import PRICING, UsageEvent, summarize_usage
+from enrich.cost import PRICING, TAVILY_USD_PER_CALL, UsageEvent, summarize_usage
 
 
 def test_deepseek_flash_is_in_pricing_table() -> None:
@@ -45,3 +45,12 @@ def test_unknown_model_warns_and_costs_zero(caplog: logging.LogCaptureFixture) -
     assert usage.est_cost_usd == 0.0
     assert usage.input_tokens == 1000
     assert any("not-a-real-model" in rec.message for rec in caplog.records)
+
+
+def test_tavily_basic_search_costs_by_call() -> None:
+    usage = summarize_usage(
+        [UsageEvent(component="search", search_calls=2, estimated=True)]
+    )
+    assert usage.search_calls == 2
+    assert usage.est_cost_usd == 2 * TAVILY_USD_PER_CALL
+    assert usage.by_component["search"] == usage.est_cost_usd

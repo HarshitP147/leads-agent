@@ -19,6 +19,7 @@
 | test_bot_wall.py | Cloudflare-style fixture HTML detected |
 | test_pipeline_failure.py | raised stage, 404 subpage, bot wall, and missing Tavily key degrade safely |
 | test_cost.py | exact DeepSeek model pricing, component rollup, unknown-model warning |
+| test_search.py | accepted/rejected LinkedIn identity/company/role evidence, literal email filtering, provider failure |
 
 ## End-to-end matrix (manual, before submission)
 
@@ -48,6 +49,18 @@ command above.
 | missing Tavily key: `TAVILY_API_KEY=` + `example.com --max-pages 2` | completed; unit route assertion `search_linkedin:skipped_no_tavily_key` |
 | bad LLM key: `DEEPSEEK_API_KEY=bad` + `example.com --max-pages 0` | `failed`; `llm_error` |
 | bot wall: ScrapingCourse Cloudflare challenge URL via `_fetch_one` + `finalize` | HTTP 403; `failed`; `bot_wall` |
+
+### M7 live run — 17 Sep 2026
+
+`uv run python -m enrich postman.com supabase.com vapi.ai --out output.json` exited 0;
+all three results passed `DomainResult.model_validate`.
+
+| Domain | Result | Leaders with LinkedIn | Public emails | Search calls | Est. total cost |
+|---|---:|---:|---:|---:|---:|
+| postman.com | ok / 0.95 | 3/3 | 6 | 5 | $0.042859 |
+| supabase.com | ok / 0.86 | 2/2 | 10 | 5 | $0.042390 |
+| vapi.ai | ok / 0.84 | 2/2 | 3 | 4 | $0.033501 |
+| **TOTAL** | 3 domains | 7/7 | 19 | 14 | **$0.118750** |
 
 ## Output sanity (read it like the reviewer)
 

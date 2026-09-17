@@ -102,16 +102,22 @@ Runs deterministically after extraction.
 
 ## LinkedIn search (`search.py`, bonus)
 
-Triggered by `route_after_verify`.
+Runs after deterministic website verification and uses Tavily basic search. Responses
+are parsed through a Pydantic model before the evidence rules run.
 
-- For each verified leader without a URL (max 5): Tavily query
-  `"{name}" "{company_name}" site:linkedin.com/in`, `max_results=5`.
-- If zero leaders: one query `"{company_name}" founder CEO site:linkedin.com/in`, then
-  accept a result only if its title contains a founder/CEO/co-founder term **and** the
-  company name. New people found this way get `verified=True`,
-  `source_url=<search result url>`, `linkedin_source="search"`.
-- Accept a URL only if it matches the LinkedIn profile regex and the result title
-  contains the person's last name (case-insensitive). First acceptable result wins.
-- Each call emits `UsageEvent(component="search", search_calls=1)`.
+- For each website-verified leader without a URL (max 5), run a company/role-scoped
+  LinkedIn query. Keep only a direct `/in/` result whose title or URL slug identifies
+  that person, and require separate result evidence that names their leadership role
+  at the target company. This prevents a snippet mentioning several people from
+  assigning one person's profile to another.
+- If the website yields no leaders, run one broad founder/CEO/CTO query and up to three
+  focused follow-ups for named profiles whose role is initially missing. A discovered
+  leader needs the same direct-profile, identity, company, and role corroboration.
+- In parallel, run two target-domain-filtered searches for public contact and sensitive
+  inboxes. Accept only literal, non-junk addresses found in result/raw text from a URL
+  on the target domain; a same-brand legacy email domain (for example `supabase.io`) is
+  allowed. Never construct or infer an address. Merge with website-harvested emails.
+- Each attempted call emits `UsageEvent(component="search", search_calls=1)`, including
+  a provider error, so the usage and failure are visible rather than lost.
 - No Tavily key → skip silently with a `route_log` entry, not an error.
 - Never fetch linkedin.com pages.

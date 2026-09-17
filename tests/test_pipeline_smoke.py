@@ -99,11 +99,15 @@ async def test_run_pipeline_ok_when_home_and_a_subpage_fetch(
     async def fake_score(state: dict) -> dict:
         return {"confidence": ConfidenceBreakdown(score=0.72, components={})}
 
+    async def fake_search(state: dict) -> dict:
+        return {}
+
     monkeypatch.setattr(pipeline.fetcher, "fetch_home", fake_fetch_home)
     monkeypatch.setattr(pipeline.discovery, "discover_links", fake_discover_links)
     monkeypatch.setattr(pipeline.fetcher, "fetch_subpages", fake_fetch_subpages)
     monkeypatch.setattr(pipeline.extractor, "extract", fake_extract)
     monkeypatch.setattr(pipeline.verify, "verify", fake_verify)
+    monkeypatch.setattr(pipeline.search, "search_linkedin", fake_search)
     monkeypatch.setattr(pipeline.scoring, "score", fake_score)
 
     result = await pipeline.run_pipeline("example.com", Settings())
@@ -149,11 +153,15 @@ async def test_run_pipeline_partial_when_only_home_fetches(
     async def fake_score(state: dict) -> dict:
         return {"confidence": ConfidenceBreakdown(score=0.3, components={})}
 
+    async def fake_search(state: dict) -> dict:
+        return {}
+
     monkeypatch.setattr(pipeline.fetcher, "fetch_home", fake_fetch_home)
     monkeypatch.setattr(pipeline.discovery, "discover_links", fake_discover_links)
     monkeypatch.setattr(pipeline.fetcher, "fetch_subpages", fake_fetch_subpages)
     monkeypatch.setattr(pipeline.extractor, "extract", fake_extract)
     monkeypatch.setattr(pipeline.verify, "verify", fake_verify)
+    monkeypatch.setattr(pipeline.search, "search_linkedin", fake_search)
     monkeypatch.setattr(pipeline.scoring, "score", fake_score)
 
     result = await pipeline.run_pipeline("example.com", Settings())

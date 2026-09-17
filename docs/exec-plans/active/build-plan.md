@@ -88,8 +88,16 @@ for the 16 Sep re-sequencing and why LangGraph/Browser Use moved from "day 1 spi
 - [x] Confirm usage events from M3's extractor roll up correctly per domain
 
 ### M7 · Bonus: Tavily LinkedIn search
-- [ ] `search.py` (Tavily) as an optional pipeline stage after `verify`, gated on
+- [x] `search.py` (Tavily) as an optional pipeline stage after `verify`, gated on
       `TAVILY_API_KEY` being set (skip silently, log to `route_log`, if not)
+- [x] Fill missing LinkedIn URLs for website-verified leaders; validate `/in/` URL,
+      surname, target-company association, and leadership role from search evidence
+- [x] If the website yields no leaders, discover founders/executives from company-scoped
+      LinkedIn results under the same validation rules; never fetch LinkedIn pages
+- [x] Search for public emails only in indexed pages on the target company domain;
+      accept literal, non-junk addresses from result evidence and never infer patterns
+- [x] Unit fixtures for accepted/rejected people and emails; live re-run on Postman,
+      Supabase, and Vapi with populated search usage/cost
 
 ### M8 · Bonus: LangGraph orchestration
 - [ ] `graph.py`: compile M3's stage functions into a `StateGraph` with the conditional
@@ -622,3 +630,11 @@ them as the personal site's owner/subject. Page titles are included as determini
 grounding because Trafilatura can omit a visible hero H1; raw HTML still never reaches
 the LLM. Live `harshit147.dev` now keeps Harshit Pandit, while both Vapi customer/
 foreign-company fixtures still drop.
+
+2026-09-17 — M7 Tavily enrichment — Replaced the search stub with a fully async,
+optional post-verification stage. Direct LinkedIn profiles must match the person's title
+or URL slug and be corroborated by target-company role evidence; literal public emails
+are accepted only from target-domain search evidence, so Tavily expands coverage without
+turning snippets into unverified facts. Every basic search is costed and failures degrade
+per call. The live three-domain run produced 7/7 leader LinkedIn URLs, 19 public emails,
+14 Tavily calls, and a $0.118750 combined estimated cost; exact results are in QUALITY.md.

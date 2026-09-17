@@ -24,7 +24,10 @@ PRICING: dict[str, tuple[float, float]] = {
     "deepseek-flash": (0.30, 1.20),
     "deepseek-v4-pro": (1.32, 3.96),
 }
-TAVILY_USD_PER_CALL: float = 0.0  # TODO M7: source before search events are emitted.
+# Tavily official pricing (https://docs.tavily.com/guides/api-credits), checked
+# 17 Sep 2026: basic search = 1 credit; pay-as-you-go = $0.008/credit. M7 only
+# emits basic searches, so one search call is conservatively estimated at $0.008.
+TAVILY_USD_PER_CALL: float = 0.008
 
 
 class UsageEvent(BaseModel):

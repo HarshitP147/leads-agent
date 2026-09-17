@@ -13,7 +13,7 @@ import time
 from datetime import UTC, datetime
 from typing import Literal
 
-from enrich import cleaner, discovery, extractor, fetcher, scoring, verify
+from enrich import cleaner, discovery, extractor, fetcher, scoring, search, verify
 from enrich.config import Settings, get_settings
 from enrich.cost import UsageEvent
 from enrich.fetcher import FetchedPage
@@ -172,11 +172,7 @@ async def _run_stages(
             }
         _merge(state, await extractor.extract(state))
         _merge(state, await verify.verify(state))
-        # M7 (bonus) will call search_linkedin when a Tavily key exists. Until then
-        # (and whenever the key is unset) skip silently with a route_log entry —
-        # QUALITY.md: "unset TAVILY_API_KEY and run → route_log notes search skipped".
-        if not get_settings().tavily_api_key:
-            _merge(state, {"route_log": ["search_linkedin:skipped_no_tavily_key"]})
+        _merge(state, await search.search_linkedin(state))
     # Hard fetch_home failure skips the LLM (ARCHITECTURE.md route_after_fetch_home)
     # but still scores — no extraction → 0.0, homepage-failed cap ≤ 0.2.
     _merge(state, await scoring.score(state))

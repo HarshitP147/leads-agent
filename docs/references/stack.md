@@ -74,7 +74,14 @@ Confirm against the **installed** source, then record findings below:
 - **Tavily**: `from tavily import AsyncTavilyClient`; `await client.search(query, ...)` has the
   same kwargs as the sync client, including `include_domains: Sequence[str]`,
   `max_results: int`, `search_depth`, `include_raw_content`. Use `AsyncTavilyClient` in
-  `search.py` to keep the graph fully async.
+  `search.py` to keep the graph fully async. Verified against installed
+  `tavily-python==0.8.3` source on 17 Sep 2026: the async client is an async context
+  manager; `include_domains_mode="filter"` enforces the domain list, and
+  `include_raw_content="text"` returns cleaned text. Do not combine an `/in/` path in a
+  `site:` query with `include_domains`; Tavily rejected that combination in live testing.
+  Search snippets can mention multiple people, so profile identity must come from the
+  result title or `/in/` slug, not arbitrary snippet text. Basic search is 1 API credit;
+  official pay-as-you-go pricing checked the same day was $0.008/credit.
 - **trafilatura markdown**: `trafilatura.extract(html, output_format='markdown', ...)` — it's a
   string enum value (`'txt' | 'markdown' | ...`), not a boolean flag. Confirmed it runs without
   error on a sample fragment; combine with `include_formatting=True`, `include_links=True` for
