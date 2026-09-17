@@ -8,7 +8,13 @@ import pytest
 from enrich import pipeline
 from enrich.config import Settings
 from enrich.fetcher import FetchedPage
-from enrich.models import DomainResult
+from enrich.models import (
+    ConfidenceBreakdown,
+    DomainResult,
+    Leader,
+    LLMExtraction,
+    LLMLeader,
+)
 
 
 def _ok_home() -> FetchedPage:
@@ -57,17 +63,56 @@ async def test_run_pipeline_ok_when_home_and_a_subpage_fetch(
             "linkedin_links": [],
         }
 
+    async def fake_extract(state: dict) -> dict:
+        return {
+            "extraction": LLMExtraction(
+                company_name="Example",
+                overview="Example builds widgets. Developers use them.",
+                target_audience="Developers.",
+                industries=["software"],
+                leaders=[
+                    LLMLeader(
+                        name="Ada Example",
+                        title="CEO",
+                        linkedin_url=None,
+                        source_url=subpage.url,
+                        evidence="Ada Example",
+                    )
+                ],
+                self_confidence=0.8,
+            )
+        }
+
+    async def fake_verify(state: dict) -> dict:
+        return {
+            "leaders": [
+                Leader(
+                    name="Ada Example",
+                    title="CEO",
+                    source_url=subpage.url,
+                    verified=True,
+                )
+            ],
+            "contact_emails": [],
+        }
+
+    async def fake_score(state: dict) -> dict:
+        return {"confidence": ConfidenceBreakdown(score=0.72, components={})}
+
     monkeypatch.setattr(pipeline.fetcher, "fetch_home", fake_fetch_home)
     monkeypatch.setattr(pipeline.discovery, "discover_links", fake_discover_links)
     monkeypatch.setattr(pipeline.fetcher, "fetch_subpages", fake_fetch_subpages)
+    monkeypatch.setattr(pipeline.extractor, "extract", fake_extract)
+    monkeypatch.setattr(pipeline.verify, "verify", fake_verify)
+    monkeypatch.setattr(pipeline.scoring, "score", fake_score)
 
     result = await pipeline.run_pipeline("example.com", Settings())
 
     assert isinstance(result, DomainResult)
     assert result.domain == "example.com"
-    assert (
-        result.status == "ok"
-    )  # home + a subpage fetched — see pipeline.py's interim rule
+    assert result.status == "ok"  # profile + leaders, no blocked/timeout
+    assert result.profile is not None
+    assert result.profile.company_name == "Example"
     assert result.errors == []
     assert len(result.pages) == 2
 
@@ -87,16 +132,36 @@ async def test_run_pipeline_partial_when_only_home_fetches(
     async def fake_fetch_subpages(state: dict) -> dict:
         return {"pages": state["pages"], "candidate_emails": [], "linkedin_links": []}
 
+    async def fake_extract(state: dict) -> dict:
+        return {
+            "extraction": LLMExtraction(
+                company_name="Example",
+                overview="Example builds widgets. Developers use them.",
+                target_audience="Developers.",
+                industries=["software"],
+                self_confidence=0.4,
+            )
+        }
+
+    async def fake_verify(state: dict) -> dict:
+        return {"leaders": [], "contact_emails": []}
+
+    async def fake_score(state: dict) -> dict:
+        return {"confidence": ConfidenceBreakdown(score=0.3, components={})}
+
     monkeypatch.setattr(pipeline.fetcher, "fetch_home", fake_fetch_home)
     monkeypatch.setattr(pipeline.discovery, "discover_links", fake_discover_links)
     monkeypatch.setattr(pipeline.fetcher, "fetch_subpages", fake_fetch_subpages)
+    monkeypatch.setattr(pipeline.extractor, "extract", fake_extract)
+    monkeypatch.setattr(pipeline.verify, "verify", fake_verify)
+    monkeypatch.setattr(pipeline.scoring, "score", fake_score)
 
     result = await pipeline.run_pipeline("example.com", Settings())
 
     assert isinstance(result, DomainResult)
-    assert (
-        result.status == "partial"
-    )  # home ok, no subpage — see pipeline.py's interim rule
+    assert result.status == "partial"  # profile exists but leaders is empty
+    assert result.profile is not None
+    assert result.profile.leaders == []
     assert result.errors == []
     assert len(result.pages) == 1
     assert result.pages[0].url == home.url

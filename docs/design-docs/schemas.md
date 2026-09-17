@@ -101,14 +101,7 @@ class DomainResult(BaseModel):
 ```
 
 Status rule: `failed` if no profile; `partial` if profile exists but any page was
-blocked/timeout or leaders is empty; else `ok`.
-
-**Interim rule (M1–M2, until `extract` lands in M3):** there is no `profile` yet, so the
-rule above can't apply. Until then, status reflects fetch health only: `failed` if the
-homepage itself failed to fetch; `ok` if the homepage fetched and at least one subpage
-also fetched successfully; `partial` if the homepage fetched but no subpage did (empty
-candidate list, all subpages 404/blocked/errored, etc). `# TODO M3`: swap back to the
-real profile-based rule above once `extract`/`verify` exist.
+blocked/timeout or leaders is empty; else `ok`. Applied in `pipeline.finalize` (M3).
 
 ## Graph state (`state.py`)
 

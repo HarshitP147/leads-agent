@@ -13,9 +13,11 @@ class Settings(BaseSettings):
     )
 
     # --- LLM for extraction ---
-    llm_provider: Literal["anthropic", "openai"] = "anthropic"
+    llm_provider: Literal["deepseek", "anthropic", "openai"] = "deepseek"
     extraction_model: str | None = None
     navigation_model: str | None = None
+    deepseek_api_key: str | None = None
+    deepseek_base_url: str | None = None
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
 

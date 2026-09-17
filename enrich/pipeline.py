@@ -4,14 +4,6 @@ bonus orchestrator (`graph.py` + `navigator.py`, M8/M9). See docs/ARCHITECTURE.m
 
 Nothing on this run path may import `graph` or `navigator` — that's the whole point of
 keeping the baseline and the bonus orchestrator decoupled.
-
-M1-M2 status: `fetch_home -> discover_links -> fetch_subpages -> clean_pages` run.
-`extract`, `verify`, `search_linkedin`, `score` are TODOs, skipped entirely (not called,
-not stubbed-and-raising) so the run path never hits a `NotImplementedError`. Because no
-extraction has happened yet, `profile` is always `None`, so the real profile-based status
-rule (schemas.md: "failed if no profile") can't apply yet either — `_interim_status`
-implements the fetch-health-only stand-in documented in schemas.md's "Interim rule"
-until `extract`/`verify` land in M3.
 """
 
 from __future__ import annotations
@@ -21,10 +13,12 @@ import time
 from datetime import UTC, datetime
 from typing import Literal
 
-from enrich import cleaner, discovery, fetcher
+from enrich import cleaner, discovery, extractor, fetcher, scoring, verify
 from enrich.config import Settings, get_settings
+from enrich.cost import UsageEvent
 from enrich.fetcher import FetchedPage
 from enrich.models import (
+    CompanyProfile,
     ConfidenceBreakdown,
     DomainResult,
     ErrorRecord,
@@ -66,18 +60,63 @@ def _to_page_record(
     )
 
 
-def _interim_status(state: DomainState) -> Literal["ok", "partial", "failed"]:
-    """# TODO M3: replace with the real profile-based rule (schemas.md, "Status rule")
-    once `extract`/`verify` exist. Until then: `failed` if the homepage itself failed;
-    `ok` if the homepage fetched and at least one subpage also fetched successfully;
-    `partial` if the homepage fetched but no subpage did."""
-    home = state.get("home")
-    if home is None or home.status != "ok":
+def _status(
+    state: DomainState, profile: CompanyProfile | None
+) -> Literal["ok", "partial", "failed"]:
+    """schemas.md: `failed` if no profile; `partial` if profile exists but any page was
+    blocked/timeout or leaders is empty; else `ok`."""
+    if profile is None:
         return "failed"
-    subpages = state.get("pages", [])[1:]  # pages[0] is always home (see fetch_home)
-    if any(p.status == "ok" for p in subpages):
-        return "ok"
-    return "partial"
+    pages = state.get("pages", [])
+    if any(page.status in ("blocked", "timeout") for page in pages):
+        return "partial"
+    if not state.get("leaders"):
+        return "partial"
+    return "ok"
+
+
+def _profile_from_state(state: DomainState) -> CompanyProfile | None:
+    extraction = state.get("extraction")
+    if extraction is None:
+        return None
+    return CompanyProfile(
+        company_name=extraction.company_name,
+        overview=extraction.overview,
+        target_audience=extraction.target_audience,
+        industries=list(extraction.industries),
+        contact_emails=state.get("contact_emails", []),
+        leaders=state.get("leaders", []),
+    )
+
+
+def _usage_from_events(events: list[UsageEvent]) -> Usage:
+    """Token rollup only — USD stays 0 until M6 fills `cost.py` pricing."""
+    return Usage(
+        input_tokens=sum(event.input_tokens for event in events),
+        output_tokens=sum(event.output_tokens for event in events),
+        llm_calls=sum(1 for event in events if event.component == "extraction"),
+        search_calls=sum(event.search_calls for event in events),
+    )
+
+
+def finalize(state: DomainState, *, started: float) -> DomainResult:
+    cleaned_by_url = {c.url: c for c in state.get("cleaned", [])}
+    pages = [_to_page_record(p, cleaned_by_url) for p in state.get("pages", [])]
+    profile = _profile_from_state(state)
+    confidence = state.get("confidence") or ConfidenceBreakdown(
+        score=0.0, components={}
+    )
+    return DomainResult(
+        domain=state.get("domain", ""),
+        status=_status(state, profile),
+        profile=profile,
+        confidence=confidence,
+        pages=pages,
+        errors=state.get("errors", []),
+        usage=_usage_from_events(state.get("usage_events", [])),
+        duration_s=time.monotonic() - started,
+        scraped_at=datetime.now(UTC).isoformat(),
+    )
 
 
 async def run_pipeline(
@@ -99,25 +138,7 @@ async def run_pipeline(
     state: DomainState = {"domain": domain, "started_at": started}
 
     try:
-        _merge(state, await fetcher.fetch_home(state))
-        home = state.get("home")
-
-        if home is not None and home.status == "ok":
-            _merge(state, await discovery.discover_links(state))
-            # TODO M9 (bonus): agentic_navigate fallback when discovery comes back thin.
-            _merge(state, await fetcher.fetch_subpages(state))
-            _merge(state, await cleaner.clean_pages(state))
-            if debug_sink is not None:
-                debug_sink[domain] = {
-                    "considered_links": state.get("considered_links", []),
-                    "cleaned": state.get("cleaned", []),
-                }
-        # else: hard fetch_home failure — skip straight to finalize, don't call the LLM
-        # on nothing (docs/ARCHITECTURE.md, route_after_fetch_home).
-
-        # TODO M3: extract, verify
-        # TODO M7 (bonus): search_linkedin
-        # TODO M4: score
+        await _run_stages(state, debug_sink=debug_sink, domain=domain)
     except Exception as exc:
         if debug:
             logger.exception("domain %s: pipeline stage raised", domain)
@@ -132,17 +153,30 @@ async def run_pipeline(
             },
         )
 
-    cleaned_by_url = {c.url: c for c in state.get("cleaned", [])}
-    pages = [_to_page_record(p, cleaned_by_url) for p in state.get("pages", [])]
+    return finalize(state, started=started)
 
-    return DomainResult(
-        domain=domain,
-        status=_interim_status(state),
-        profile=None,
-        confidence=ConfidenceBreakdown(score=0.0, components={}),
-        pages=pages,
-        errors=state.get("errors", []),
-        usage=Usage(),
-        duration_s=time.monotonic() - started,
-        scraped_at=datetime.now(UTC).isoformat(),
-    )
+
+async def _run_stages(
+    state: DomainState,
+    *,
+    debug_sink: dict[str, dict[str, list]] | None,
+    domain: str,
+) -> None:
+    _merge(state, await fetcher.fetch_home(state))
+    home = state.get("home")
+    if home is not None and home.status == "ok":
+        _merge(state, await discovery.discover_links(state))
+        # TODO M9 (bonus): agentic_navigate fallback when discovery comes back thin.
+        _merge(state, await fetcher.fetch_subpages(state))
+        _merge(state, await cleaner.clean_pages(state))
+        if debug_sink is not None:
+            debug_sink[domain] = {
+                "considered_links": state.get("considered_links", []),
+                "cleaned": state.get("cleaned", []),
+            }
+        _merge(state, await extractor.extract(state))
+        _merge(state, await verify.verify(state))
+        # TODO M7 (bonus): search_linkedin
+    # Hard fetch_home failure skips the LLM (ARCHITECTURE.md route_after_fetch_home)
+    # but still scores — no extraction → 0.0, homepage-failed cap ≤ 0.2.
+    _merge(state, await scoring.score(state))

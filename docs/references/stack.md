@@ -80,25 +80,25 @@ Confirm against the **installed** source, then record findings below:
   error on a sample fragment; combine with `include_formatting=True`, `include_links=True` for
   richer markdown when cleaning pages in `cleaner.py`.
 
-### DeepSeek (16 Sep — LLM provider switch, checked against api-docs.deepseek.com + installed `langchain-deepseek==1.1.0` source)
+### DeepSeek (16 Sep — LLM provider switch; re-checked 17 Sep against api-docs.deepseek.com + installed `langchain-deepseek==1.1.0` source)
 
 - **`langchain-deepseek==1.1.0` installs clean against our existing pins** — no relaxing
   needed. It requires `langchain-core<2.0.0,>=1.4.0` (we have 1.6.3 ✓) and
   `langchain-openai<2.0.0,>=1.1.0` (we have 1.1.14 ✓, the version already forced down for
   browser-use). `pip install --dry-run` confirmed zero new conflicts before installing for real.
-- **Model ids**: DeepSeek's live `/chat/completions` API reference (most authoritative —
-  it's the literal `model` enum) currently lists **`deepseek-flash`** and
-  **`deepseek-v4-pro`**. Separately, DeepSeek's changelog says `deepseek-chat`
-  (non-thinking) and `deepseek-reasoner` (thinking) are still-live aliases that get
-  upgraded to whatever the current model generation is (last noted: DeepSeek-V3.1,
-  2025-08-21) — these older alias names may still work but the API reference doesn't list
-  them as the current canonical ids. **Recorded `EXTRACTION_MODEL=deepseek-v4-pro`** in
-  `.env.example` as the higher-quality option; `deepseek-flash` is the cheaper/faster
-  alternative if cost becomes a concern in M6. Re-check this before the final submission
-  run in case DeepSeek renames again before 18 Sep.
-- **Function calling**: confirmed via docs examples (`tools` param, `type: "function"`,
-  standard OpenAI-shaped tool-call loop) — DeepSeek supports it natively, which is what
-  LangChain's `with_structured_output(..., method="function_calling")` (the default) uses
+- **Model ids (re-checked 17 Sep 2026):** DeepSeek's live `/chat/completions` `model`
+  enum and `GET /models` still list exactly **`deepseek-flash`** and
+  **`deepseek-v4-pro`**. Pricing page (same day): Flash is DeepSeek-V4.1-Flash (native
+  multimodal; legacy `deepseek-v4-flash` / `deepseek-v4-flash-vision-exp` names still
+  route here); V4 Pro continues after 14 Sep 2026 with unchanged billing. Both models
+  list **Tool Calls ✓** and **JSON Output ✓**. Default in `.env.example` is
+  `EXTRACTION_MODEL=deepseek-flash` (cheaper/faster, still tool-calling capable);
+  `deepseek-v4-pro` is the higher-quality alternative. Older aliases `deepseek-chat` /
+  `deepseek-reasoner` are not in the current enum.
+- **Function calling**: confirmed 17 Sep via the Tool Calls guide
+  (`api-docs.deepseek.com/guides/tool_calls`) — `tools` param, `type: "function"`,
+  OpenAI-shaped loop, examples use `model="deepseek-flash"`. This is what LangChain's
+  `with_structured_output(..., method="function_calling")` (ChatDeepSeek's default) uses
   under the hood.
 - **JSON mode**: `response_format: {"type": "json_object"}` is supported, but per DeepSeek's
   own docs, "you must also instruct the model to produce JSON yourself via a system or

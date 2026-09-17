@@ -1,18 +1,84 @@
 [
   {
-    "domain": "vercel.com",
+    "domain": "postman.com",
     "status": "failed",
     "profile": null,
     "confidence": {
       "score": 0.0,
-      "components": {}
+      "components": {
+        "no_extraction": 1.0
+      }
     },
-    "pages": [],
+    "pages": [
+      {
+        "url": "https://www.postman.com/",
+        "kind": "home",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 100491,
+        "clean_tokens": 73,
+        "discovered_by": "seed"
+      },
+      {
+        "url": "https://www.postman.com/company/about-postman/",
+        "kind": "about",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 92376,
+        "clean_tokens": 858,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/pricing/",
+        "kind": "pricing",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 301460,
+        "clean_tokens": 3453,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/company/press-media/",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 95749,
+        "clean_tokens": 733,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/company/contact-sales/",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 78004,
+        "clean_tokens": 89,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/company/careers/",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 88596,
+        "clean_tokens": 956,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://www.postman.com/company/contact-us/",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 85084,
+        "clean_tokens": 98,
+        "discovered_by": "anchor"
+      }
+    ],
     "errors": [
       {
-        "stage": "cli",
-        "kind": "internal",
-        "message": "",
+        "stage": "extract",
+        "kind": "llm_error",
+        "message": "DEEPSEEK_API_KEY is not set",
         "url": null
       }
     ],
@@ -24,7 +90,195 @@
       "est_cost_usd": 0.0,
       "by_component": {}
     },
-    "duration_s": 1.8112165420025121,
-    "scraped_at": "2026-09-16T11:42:18.421381+00:00"
+    "duration_s": 23.51077016700583,
+    "scraped_at": "2026-09-17T07:56:36.658327+00:00"
+  },
+  {
+    "domain": "supabase.com",
+    "status": "failed",
+    "profile": null,
+    "confidence": {
+      "score": 0.0,
+      "components": {
+        "no_extraction": 1.0
+      }
+    },
+    "pages": [
+      {
+        "url": "https://supabase.com/",
+        "kind": "home",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 544622,
+        "clean_tokens": 537,
+        "discovered_by": "seed"
+      },
+      {
+        "url": "https://supabase.com/contribute/about",
+        "kind": "about",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 67497,
+        "clean_tokens": 553,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/pricing",
+        "kind": "pricing",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 159808,
+        "clean_tokens": 3200,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/careers",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 349627,
+        "clean_tokens": 500,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/contact/sales",
+        "kind": "contact",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 41882,
+        "clean_tokens": 72,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/company",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 68187,
+        "clean_tokens": 443,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/support",
+        "kind": "contact",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 39696,
+        "clean_tokens": 107,
+        "discovered_by": "sitemap"
+      }
+    ],
+    "errors": [
+      {
+        "stage": "extract",
+        "kind": "llm_error",
+        "message": "DEEPSEEK_API_KEY is not set",
+        "url": null
+      }
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "llm_calls": 0,
+      "search_calls": 0,
+      "est_cost_usd": 0.0,
+      "by_component": {}
+    },
+    "duration_s": 31.83933691699349,
+    "scraped_at": "2026-09-17T07:56:44.988657+00:00"
+  },
+  {
+    "domain": "vapi.ai",
+    "status": "failed",
+    "profile": null,
+    "confidence": {
+      "score": 0.0,
+      "components": {
+        "no_extraction": 1.0
+      }
+    },
+    "pages": [
+      {
+        "url": "https://vapi.ai/",
+        "kind": "home",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 110687,
+        "clean_tokens": 467,
+        "discovered_by": "seed"
+      },
+      {
+        "url": "https://vapi.ai/careers",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 235474,
+        "clean_tokens": 457,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://vapi.ai/pricing",
+        "kind": "pricing",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 97136,
+        "clean_tokens": 679,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://vapi.ai/sales",
+        "kind": "contact",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 151773,
+        "clean_tokens": 55,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://vapi.ai/support",
+        "kind": "contact",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 100395,
+        "clean_tokens": 334,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://docs.vapi.ai/support",
+        "kind": "contact",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 307845,
+        "clean_tokens": 332,
+        "discovered_by": "anchor"
+      },
+      {
+        "url": "https://vapi.ai/custom-agents/sales-team-agent",
+        "kind": "team",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 183593,
+        "clean_tokens": 494,
+        "discovered_by": "sitemap"
+      }
+    ],
+    "errors": [
+      {
+        "stage": "extract",
+        "kind": "llm_error",
+        "message": "DEEPSEEK_API_KEY is not set",
+        "url": null
+      }
+    ],
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "llm_calls": 0,
+      "search_calls": 0,
+      "est_cost_usd": 0.0,
+      "by_component": {}
+    },
+    "duration_s": 32.81201316700026,
+    "scraped_at": "2026-09-17T07:56:45.962479+00:00"
   }
 ]

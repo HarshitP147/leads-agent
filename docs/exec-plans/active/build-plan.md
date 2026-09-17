@@ -53,20 +53,20 @@ for the 16 Sep re-sequencing and why LangGraph/Browser Use moved from "day 1 spi
 ## Day 2 — 17 Sep
 
 ### M3 · Extraction (DeepSeek) + verification + confidence (assignment step 3)
-- [ ] Extend `pipeline.py` (created partial in M1) with `extract → verify → score →
+- [x] Extend `pipeline.py` (created partial in M1) with `extract → verify → score →
       finalize`, once `clean_pages` lands in M2. Each stage stays a small function that
       catches its own errors and appends `ErrorRecord`s; signatures stay
       `async def stage(state) -> dict` so they can become LangGraph nodes unchanged in M8.
-- [ ] `extractor.py`: `ChatDeepSeek` (`langchain-deepseek`), `with_structured_output(
+- [x] `extractor.py`: `ChatDeepSeek` (`langchain-deepseek`), `with_structured_output(
       LLMExtraction, method="function_calling", include_raw=True)`; on `parsing_error` one
       repair retry, then fall back to `method="json_mode"` +
       `LLMExtraction.model_validate_json(raw.content)`; usage events from `usage_metadata`
-- [ ] Add `deepseek` to `config.Settings.llm_provider` Literal + `deepseek_api_key` field
+- [x] Add `deepseek` to `config.Settings.llm_provider` Literal + `deepseek_api_key` field
       (small, do alongside `extractor.py` — not before)
-- [ ] `verify.py` + tests
-- [ ] `scoring.py` + tests
-- [ ] Status rule (ok/partial/failed) in `finalize`
-- [ ] End-to-end on 3 domains producing `output.json`
+- [x] `verify.py` + tests
+- [x] `scoring.py` + tests
+- [x] Status rule (ok/partial/failed) in `finalize`
+- [x] End-to-end on 3 domains producing `output.json`
 
 ### M4 · Resilience (assignment step 4)
 - [ ] Stage-level error capture everywhere; domain + run level wrappers
@@ -518,3 +518,39 @@ M7's job. Updated `AGENTS.md`'s Commands section the same way.
 -q` → 22 passed. `uv run python -m enrich --help` → works. `uv run ruff check .` →
 clean. From now on: `uv sync` / `uv run ...` for everything; never
 `pip install .`/`uv pip install .` (non-editable) on this project again.
+
+2026-09-17 — M3: DeepSeek extraction + verify + scoring — Re-checked DeepSeek's live
+docs (`api-docs.deepseek.com`, 17 Sep): the `/chat/completions` model enum is still
+exactly `deepseek-flash` and `deepseek-v4-pro`; both list Tool Calls and JSON Output.
+Default `EXTRACTION_MODEL=deepseek-flash` (`.env.example`). `ChatDeepSeek` (installed
+`langchain-deepseek==1.1.0`) still defaults `with_structured_output` to
+`method="function_calling"` (OpenAI-shaped `tools`), coerces `json_schema` to that,
+and `strict=True` still routes to the beta endpoint requiring every property required
+— so we still never pass `strict=True`. Function-calling first, one repair retry on
+`parsing_error`, then `json_mode` + `LLMExtraction.model_validate_json(raw.content)`
+because JSON mode only guarantees syntax, not schema. Usage comes off
+`AIMessage.usage_metadata` via `include_raw=True`.
+
+`verify.py` is deterministic on purpose: names are NFKD-normalised and must appear in
+cleaned markdown / TEAM CARDS / LinkedIn anchors (first+last token allowed when a
+middle name is present); unverified people are dropped with
+`ErrorRecord(kind="unverified_person")` rather than shipped; LinkedIn URLs that don't
+match `linkedin.com/in/...` or aren't on a fetched page are nulled, not guessed.
+Emails are a set-intersect with `candidate_emails` (LLM-ignored addresses still kept
+as `purpose="other"`). Overview is forced to two sentences with a splitter, no second
+LLM call. Confidence is the documented weighted blend, not the model's self-rating —
+self-confidence is only the 0.20 `llm_self` term; blocked and unverified-person
+penalties apply after, homepage-failed caps at 0.2, no extraction is 0.0. Status in
+`finalize` is the schemas.md rule: no profile → `failed`; profile but blocked/timeout
+or empty leaders → `partial`; else `ok`. The M1–M2 fetch-health interim rule is gone.
+
+**Verified**: `uv run pytest -q` → 31 passed (new `test_verify.py` + `test_scoring.py`;
+pipeline smoke tests stub extract/verify/score so they never hit the network).
+`ruff check`/`format` clean on `enrich/`+`tests/`. Live run
+`python -m enrich postman.com supabase.com vapi.ai --debug`: fetch+clean still work
+(7 pages each, 99–100% token reduction) but every domain is `status=failed`,
+`confidence=0.00`, `profile=null`, `errors=[extract/llm_error "DEEPSEEK_API_KEY is not
+set"]` — `.env` has an empty key, so we never call the API. That is the correct
+status rule (no profile → failed) and the stage-level catch working; it is **not** a
+populated extraction. Fill `DEEPSEEK_API_KEY` and re-run for real profiles. `output.json`
+from this run is committed so the failure path is inspectable.
