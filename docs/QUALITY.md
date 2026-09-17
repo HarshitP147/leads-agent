@@ -19,7 +19,10 @@
 | test_bot_wall.py | Cloudflare-style fixture HTML detected |
 | test_pipeline_failure.py | raised stage, 404 subpage, bot wall, and missing Tavily key degrade safely |
 | test_cost.py | exact DeepSeek model pricing, component rollup, unknown-model warning |
-| test_search.py | accepted/rejected LinkedIn identity/company/role evidence, literal email filtering, provider failure |
+| test_search.py | accepted/rejected LinkedIn identity/company/role evidence, literal email filtering, provider failure, Tavily call budget + early-stop, subdomain email rejection |
+| test_cli.py | domain normalization (URL -> bare host), localhost/private-IP/non-http rejection, case-insensitive dedupe, config fail-fast |
+| test_redirect.py | cross-domain homepage redirect adopts the final domain; same-domain and www-only redirects don't |
+| test_prompt_injection.py | hidden-div/HTML-comment payload never reaches candidate emails, LinkedIn links, cleaned markdown, or the final profile — full pipeline (real LLM if a key is configured) plus a hand-built worst-case extraction through verify.py |
 
 ## End-to-end matrix (manual, before submission)
 

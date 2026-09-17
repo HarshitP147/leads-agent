@@ -107,6 +107,9 @@ BLOCKED_EXTENSIONS = (
     ".ico",
 )
 
+_HIDDEN_STYLE_RE = re.compile(
+    r"display\s*:\s*none|visibility\s*:\s*hidden", re.IGNORECASE
+)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 EMAIL_JUNK_SUBSTRINGS = ("sentry", "wixpress", "example.com", "example.org")
 LINKEDIN_RE = re.compile(
@@ -537,8 +540,25 @@ def _select_candidates(
 # --- Email / LinkedIn harvesting (used by discover_links AND fetch_subpages) ---------
 
 
+def _is_hidden(tag) -> bool:
+    """See cleaner._is_hidden — same predicate, duplicated rather than imported to
+    avoid a new cross-module dependency for one boolean check. A hidden element is
+    invisible to a real visitor; harvesting an email/LinkedIn link from one would let
+    a planted `display:none` div inject a fake contact indistinguishable from a real
+    one (see tests/test_prompt_injection.py)."""
+    if tag.has_attr("hidden") or tag.get("aria-hidden") == "true":
+        return True
+    return bool(_HIDDEN_STYLE_RE.search(tag.get("style") or ""))
+
+
+def _strip_hidden(soup: BeautifulSoup) -> None:
+    for tag in soup.find_all(_is_hidden):
+        tag.decompose()
+
+
 def find_emails(html: str, source_url: str, domain: str) -> list[FoundEmail]:
     soup = BeautifulSoup(html, "lxml")
+    _strip_hidden(soup)
     found: dict[str, FoundEmail] = {}
 
     for anchor in soup.find_all("a", href=True):
@@ -578,6 +598,7 @@ def _is_junk_email(email: str) -> bool:
 
 def find_linkedin_links(html: str, source_url: str) -> list[FoundLink]:
     soup = BeautifulSoup(html, "lxml")
+    _strip_hidden(soup)
     found: dict[str, FoundLink] = {}
     for anchor in soup.find_all("a", href=True):
         href = anchor["href"].strip()

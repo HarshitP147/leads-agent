@@ -5,6 +5,7 @@ See docs/design-docs/discovery-and-cleaning.md (Cleaning).
 
 from __future__ import annotations
 
+import copy
 import logging
 import re
 from typing import TYPE_CHECKING, Literal
@@ -43,6 +44,9 @@ REMOVE_SELECTORS = (
     "footer",
 )
 COOKIE_BANNER_MARKERS = ("cookie", "consent", "gdpr")
+_HIDDEN_STYLE_RE = re.compile(
+    r"display\s*:\s*none|visibility\s*:\s*hidden", re.IGNORECASE
+)
 MIN_TRAFILATURA_CHARS = 200
 TEAM_CARD_KINDS = ("team", "leadership")
 _BLANK_LINES_RE = re.compile(r"\n{3,}")
@@ -98,12 +102,26 @@ def _is_cookie_banner(tag) -> bool:
     return any(marker in haystack for marker in COOKIE_BANNER_MARKERS)
 
 
+def _is_hidden(tag) -> bool:
+    """True for content invisible to a real visitor: the `hidden` attribute,
+    `aria-hidden="true"`, or an inline `display:none`/`visibility:hidden` style. A
+    hidden element is exactly where a prompt-injection payload would be planted (never
+    seen by a human, only by whatever scrapes the raw HTML) — see
+    tests/test_prompt_injection.py."""
+    if tag.has_attr("hidden") or tag.get("aria-hidden") == "true":
+        return True
+    return bool(_HIDDEN_STYLE_RE.search(tag.get("style") or ""))
+
+
+def _strip_hidden(soup: BeautifulSoup) -> None:
+    for tag in soup.find_all(_is_hidden):
+        tag.decompose()
+
+
 def _strip_boilerplate(soup: BeautifulSoup) -> None:
     for selector in REMOVE_SELECTORS:
         for tag in soup.find_all(selector):
             tag.decompose()
-    for tag in soup.find_all(attrs={"aria-hidden": "true"}):
-        tag.decompose()
     for tag in list(soup.find_all(True)):
         if tag.parent is not None and _is_cookie_banner(tag):
             tag.decompose()
@@ -173,10 +191,13 @@ def _truncate(text: str, max_chars: int) -> str:
 
 
 def _clean_markdown(html: str) -> tuple[str, BeautifulSoup]:
-    """Returns (markdown, soup-before-stripping) — the caller needs the un-stripped
-    soup for team-card extraction."""
+    """Returns (markdown, soup-before-boilerplate-stripping) — the caller needs this
+    soup for team-card extraction. Hidden content is removed from it here too (not
+    only from `stripped`): team-card extraction must not treat an invisible fake h3 as
+    a real team member any more than the markdown extraction should quote one."""
     soup = BeautifulSoup(html, "lxml")
-    stripped = BeautifulSoup(html, "lxml")
+    _strip_hidden(soup)
+    stripped = copy.deepcopy(soup)
     _strip_boilerplate(stripped)
     markdown = (
         trafilatura.extract(
