@@ -76,10 +76,10 @@ for the 16 Sep re-sequencing and why LangGraph/Browser Use moved from "day 1 spi
 - [x] `test_pipeline_failure.py` (a stage stub that raises still yields a `failed` `DomainResult`)
 
 ### M5 · Ship baseline (assignment: working baseline before bonuses)
-- [ ] README: what/why, linear pipeline diagram, setup (.env), run, sample output excerpt,
+- [x] README: what/why, linear pipeline diagram, setup (.env), run, sample output excerpt,
       design decisions (deterministic-first, verification, confidence formula), limitations
-- [ ] Final clean baseline run → commit `output.json` for the 3 domains
-- [ ] `ruff`, `pytest` green
+- [x] Final clean baseline run → commit `output.json` for the 3 domains
+- [x] `ruff`, `pytest` green
 
 ## Day 3 — 18 Sep (morning)
 
@@ -99,21 +99,26 @@ for the 16 Sep re-sequencing and why LangGraph/Browser Use moved from "day 1 spi
 - [x] Unit fixtures for accepted/rejected people and emails; live re-run on Postman,
       Supabase, and Vapi with populated search usage/cost
 
-### M8 · Bonus: LangGraph orchestration
-- [ ] `graph.py`: compile M3's stage functions into a `StateGraph` with the conditional
+### M8 · Bonus: LangGraph orchestration — **dropped for submission, see Decisions (18 Sep)**
+- [ ] ~~`graph.py`: compile M3's stage functions into a `StateGraph` with the conditional
       edges from ARCHITECTURE.md's bonus diagram (`route_after_fetch_home`,
-      `route_after_discover`, `route_after_verify`)
-- [ ] `cli.py` invokes `graph.ainvoke()` instead of `pipeline.run_domain()` once this lands
+      `route_after_discover`, `route_after_verify`)~~
+- [ ] ~~`cli.py` invokes `graph.ainvoke()` instead of `pipeline.run_domain()` once this lands~~
 
-### M9 · Bonus: Browser Use fallback
-- [ ] `navigator.py` (Browser Use) wired into the LangGraph path via
+### M9 · Bonus: Browser Use fallback — **dropped for submission, see Decisions (18 Sep)**
+- [ ] ~~`navigator.py` (Browser Use) wired into the LangGraph path via
       `route_after_discover`, capped by `BROWSER_USE_MAX_STEPS`, costed via
-      `Agent(calculate_cost=True)` / `history.usage`
+      `Agent(calculate_cost=True)` / `history.usage`~~
 
 ### M10 · Ship (final)
-- [ ] README: add bonus sections (LangGraph diagram in mermaid, cost table, search)
-- [ ] Final clean run with all bonuses → commit `output.json`
-- [ ] `ruff`, `pytest` green; remove dead code; push to GitHub (public)
+- [x] README: bonus sections added for what was actually built (cost tracking table,
+      Tavily search) — no LangGraph diagram, since M8 was dropped; README says so
+      explicitly rather than silently omitting it
+- [x] Final clean run with the implemented bonuses (M6 cost tracking, M7 search) →
+      committed `output.json` (postman.com/supabase.com/vapi.ai, all `status="ok"`,
+      confidence 0.85–0.94)
+- [x] `ruff`, `pytest` green (107 tests)
+- [ ] remove dead code; push to GitHub (public)
 - [ ] Human: record Loom (structure 30s → live run 60s → output + confidence 45s → failure demo 20s)
 - [ ] Human: send email (repo, Loom, LinkedIn, explicit "Yes" to the 40% operations question)
 
@@ -136,6 +141,17 @@ for the 16 Sep re-sequencing and why LangGraph/Browser Use moved from "day 1 spi
   for the function-calling/json_mode fallback strategy.
 - ~~16 Sep: LangGraph pipeline; Playwright deterministic path first; Browser Use only as
   capped fallback.~~ Superseded same day — see above.
+- 18 Sep: M8 (LangGraph orchestration) and M9 (Browser Use fallback) dropped from
+  submission scope. The plain async `pipeline.py` baseline plus M6 (cost tracking) and
+  M7 (Tavily search) bonuses are complete, tested (107 tests), and verified against
+  real 404s/timeouts/bot walls/bad keys (QUALITY.md). Rebuilding the orchestration layer
+  on top of an already-solid, already-tested baseline under the submission deadline was
+  judged higher-risk than valuable: `graph.py`/`navigator.py` would need their own test
+  coverage and live verification to reach the same bar as the rest of the codebase, and
+  every stage function is already shaped (`async def stage(state) -> dict`) for a
+  `StateGraph` to wire in later without touching stage internals — so this is a scope
+  cut, not a design dead-end. README documents this explicitly rather than silently
+  omitting the LangGraph diagram product-spec.md's bonus table implies.
 
 ## Progress Log
 
@@ -778,3 +794,18 @@ mutation).
 
 **Verified**: `uv run pytest -q` → 107 passed. `ruff check`/`format --check` clean on
 `enrich/`+`tests/`.
+
+2026-09-18 — M5/M10 README + final baseline run — Wrote the full README (previously
+Setup/Run/Checks only): what/why, mermaid pipeline diagram, `.env` setup, run
+(including the domain-normalization example), a real sample-output excerpt, design
+decisions, and a Limitations section pulled honestly from `tech-debt.md` plus the
+LangGraph/Browser-Use scope cut (see Decisions, 18 Sep). Every number quoted in the
+README (confidence components, token/cost figures) was pulled from an actual run's
+`output.json`, not written from memory — the first draft's `leader_quality`/`llm_self`/
+`search_calls` numbers were guessed and wrong, caught by re-checking against the real
+JSON before committing. Discarded a stray uncommitted `output.json` (a leftover
+`localhost:8080` rejection-test artifact from CLI-input-hygiene testing, not the
+deliverable) and ran a fresh clean baseline: `postman.com supabase.com vapi.ai`, all
+three `status="ok"`, confidence 0.85 (vapi.ai) / 0.86 (supabase.com) / 0.94
+(postman.com), committed as the submission's `output.json`. `pytest -q` (107 passed)
+and `ruff check`/`format --check` reconfirmed clean after the run.
