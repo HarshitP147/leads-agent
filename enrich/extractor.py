@@ -30,6 +30,13 @@ Use ONLY the provided page content. If something is not stated, leave it empty.
 Never guess people's names, titles, emails, or LinkedIn URLs.
 Emails must be chosen from CANDIDATE EMAILS. LinkedIn URLs must appear in the content
 or in LINKEDIN LINKS.
+
+Leaders must be people presented as working AT the target company: founders,
+executives, or team members. Do NOT include testimonial quotes, customer logos,
+customer case-study subjects, advisors, investors, or authors of blog posts /
+podcasts. If a person's title names a different company (e.g. "CPO, Kavak"),
+they are not a leader of the target company. Prefer names from about/team/
+company/leadership pages; homepage quotes are almost never leadership.
 """
 JSON_MODE_INSTRUCTION = (
     "Respond with a single JSON object matching the extraction schema. "
@@ -163,9 +170,10 @@ async def _invoke(
 
 
 def _fail(kind: str, message: str, events: list[UsageEvent] | None = None) -> dict:
+    line = message.splitlines()[0].strip()[:200]
     return {
         "extraction": None,
-        "errors": [ErrorRecord(stage="extract", kind=kind, message=message)],
+        "errors": [ErrorRecord(stage="extract", kind=kind, message=line)],
         "usage_events": events or [],
         "route_log": [f"extract:{kind}"],
     }

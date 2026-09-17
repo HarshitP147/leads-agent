@@ -84,6 +84,12 @@ COLLECTION_INDEX_SCORE = 0.5
 LOCALE_SEGMENT_RE = re.compile(r"^[a-z]{2}(-[a-z]{2})?$")
 
 PENALTY_SUBSTRINGS = ("/legal", "/terms", "/privacy")
+# Product-marketing path segments: a keyword hit here is almost never a real
+# about/team page (vapi.ai `/custom-agents/sales-team-agent` classified as team).
+PRODUCT_PATH_SEGMENTS = frozenset(
+    {"custom-agents", "solutions", "use-cases", "integrations"}
+)
+PRODUCT_PATH_PENALTY = 4.0
 LANG_PREFIX_RE = re.compile(r"^/[a-z]{2}(-[a-z]{2})?/")
 BLOCKED_EXTENSIONS = (
     ".pdf",
@@ -212,7 +218,6 @@ def _keyword_score(
     weight: float,
     *,
     path_lower: str,
-    path_tokens: set[str],
     anchor_tokens: set[str],
     last_segment_tokens: set[str],
 ) -> float | None:
@@ -225,19 +230,15 @@ def _keyword_score(
     a four-word product slug like "sales-team-agent", and a plain "About" link outranks a
     repeated marketing CTA like "Read the story →" that merely contains the word "story"
     (also caught live in the M1 smoke test, on supabase.com's customer-story cards)."""
+    last_seg = path_lower.rstrip("/").rsplit("/", 1)[-1]
     if "-" in keyword:
-        return weight if keyword in path_lower else None
+        return weight if keyword in last_seg else None
 
     candidates: list[float] = []
+    if keyword in last_segment_tokens:
+        candidates.append(weight / max(len(last_segment_tokens), 1))
     if keyword in anchor_tokens:
         candidates.append(weight / max(len(anchor_tokens), 1))
-    if keyword in path_tokens:
-        if keyword in last_segment_tokens:
-            candidates.append(weight / max(len(last_segment_tokens), 1))
-        else:
-            candidates.append(
-                weight
-            )  # matched a whole earlier path segment (e.g. "/team/<slug>")
     return max(candidates) if candidates else None
 
 
@@ -245,7 +246,6 @@ def _classify(
     path: str, anchor_text: str
 ) -> tuple[Kind | Literal["other"], float] | None:
     path_lower = path.lower()
-    path_tokens = _tokenize(path)
     anchor_tokens = _tokenize(anchor_text)
     segments = [seg for seg in path.split("/") if seg]
     last_segment_tokens = _tokenize(segments[-1]) if segments else set()
@@ -257,7 +257,6 @@ def _classify(
                 kw,
                 weight,
                 path_lower=path_lower,
-                path_tokens=path_tokens,
                 anchor_tokens=anchor_tokens,
                 last_segment_tokens=last_segment_tokens,
             )
@@ -279,11 +278,18 @@ def _classify(
     penalty = 0.0
     if any(sub in path.lower() for sub in PENALTY_SUBSTRINGS):
         penalty += 2.0
+    if any(
+        seg.lower() in PRODUCT_PATH_SEGMENTS for seg in _locale_adjusted_segments(path)
+    ):
+        penalty += PRODUCT_PATH_PENALTY
     if LANG_PREFIX_RE.match(path):
         penalty += 1.0
     if urlparse(path).query:
         penalty += 1.0
-    return kind, weight - penalty
+    score = weight - penalty
+    if score <= 0:
+        return None
+    return kind, score
 
 
 # --- Sitemap discovery (httpx, no browser) -------------------------------------------
@@ -540,7 +546,9 @@ def find_emails(html: str, source_url: str, domain: str) -> list[FoundEmail]:
         if href.lower().startswith("mailto:"):
             email = href.split(":", 1)[1].split("?")[0].strip()
             if email and not _is_junk_email(email):
-                found[email.lower()] = FoundEmail(email=email, source_url=source_url)
+                found[email.lower()] = FoundEmail(
+                    email=email.lower(), source_url=source_url
+                )
 
     for match in EMAIL_RE.finditer(soup.get_text(" ")):
         email = match.group(0)
@@ -551,7 +559,9 @@ def find_emails(html: str, source_url: str, domain: str) -> list[FoundEmail]:
             _same_site(f"https://{email_domain}", domain) or email.lower() in found
         ):
             continue
-        found.setdefault(email.lower(), FoundEmail(email=email, source_url=source_url))
+        found.setdefault(
+            email.lower(), FoundEmail(email=email.lower(), source_url=source_url)
+        )
 
     return list(found.values())
 

@@ -76,8 +76,13 @@ Runs deterministically after extraction.
 - `verified=True` if the normalised full name occurs in the cleaned text of `source_url`
   or any fetched page, or in TEAM CARDS / LINKEDIN LINKS anchor text.
   Allow match on first+last token when a middle name is present.
-- Unverified leaders are **dropped** from output (logged as
-  `ErrorRecord(kind="unverified_person")` so the reviewer sees we caught it).
+- Drop if the title names a company other than the target (e.g. `CPO, Kavak`).
+- Drop if the evidence/name sits in a testimonial/quote attribution block.
+- Prefer about/team/company/leadership pages. A name found **only** on the homepage
+  needs a strong title (`founder`/`CEO`/`CTO`/`COO`/`VP`/`Head of`) and no foreign
+  company in the title.
+- Unverified / dropped leaders are logged as
+  `ErrorRecord(kind="unverified_person")` so the reviewer sees we caught it.
 - LinkedIn URL kept only if it appears in `linkedin_links` or page text, and matches
   `^https?://([a-z]{2,3}\.)?linkedin\.com/in/[A-Za-z0-9\-_%]+/?$`. Otherwise set `None`
   (search may fill it later). `linkedin_source="website"`.

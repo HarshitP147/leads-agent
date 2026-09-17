@@ -82,9 +82,14 @@ product-marketing sites that sell "X management" features (vapi.ai's own
 the M1 smoke test — all 6 picked slots were junk). Only compound, unambiguous forms
 (`management-team`, `leadership-team`, ...) are kept.
 
-Penalise (score discount, still a candidate): `/legal`, `/terms`, `/privacy`, query
-strings. Pick best-scoring URL per kind, then fill remaining slots by score. Dedupe by
-normalised path.
+Kind keywords match the **last path segment** primarily (plus anchor text). An earlier
+segment containing `team` is not enough: `/custom-agents/sales-team-agent` is not
+`kind="team"`; `/about/team` is.
+
+Penalise (score discount; score ≤ 0 drops the kind): `/legal`, `/terms`, `/privacy`,
+query strings, and product-ish path segments `/custom-agents/`, `/solutions/`,
+`/use-cases/`, `/integrations/`. Pick best-scoring URL per kind, then fill remaining
+slots by score. Dedupe by normalised path.
 
 ### Collection sections — drop children, keep the index as filler (16 Sep, M1 review)
 

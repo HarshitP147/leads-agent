@@ -37,7 +37,13 @@ from tenacity import (
 )
 
 from enrich.config import get_settings
-from enrich.discovery import FoundEmail, FoundLink, find_emails, find_linkedin_links
+from enrich.discovery import (
+    CandidateLink,
+    FoundEmail,
+    FoundLink,
+    find_emails,
+    find_linkedin_links,
+)
 from enrich.models import ErrorRecord
 
 if TYPE_CHECKING:
@@ -61,6 +67,18 @@ BOT_WALL_MARKERS = (
 )
 _TAG_RE = re.compile(r"<[^>]+>")
 _DNS_ERROR_MARKERS = ("ERR_NAME_NOT_RESOLVED", "ERR_NAME_RESOLUTION_FAILED")
+_EMPTY_OR_CONN_MARKERS = (
+    "ERR_EMPTY_RESPONSE",
+    "ERR_CONNECTION_CLOSED",
+    "ERR_CONNECTION_RESET",
+    "ERR_CONNECTION_REFUSED",
+    "ERR_CONNECTION_TIMED_OUT",
+    "ERR_CONNECTION_ABORTED",
+    "ERR_INTERNET_DISCONNECTED",
+    "ERR_ADDRESS_UNREACHABLE",
+    "ERR_CONNECTION_FAILED",
+)
+_ERROR_MESSAGE_LIMIT = 200
 
 # Playwright ops with no native `timeout=` kwarg (new_context, new_page, close,
 # content, title, ...) get bounded here instead. This matters more than it looks:
@@ -213,7 +231,9 @@ def _is_retryable_navigation_error(exc: BaseException) -> bool:
     if not isinstance(exc, (PlaywrightTimeoutError, PlaywrightError)):
         return False
     message = str(exc)
-    return not any(marker in message for marker in _DNS_ERROR_MARKERS)
+    return not any(
+        marker in message for marker in (*_DNS_ERROR_MARKERS, *_EMPTY_OR_CONN_MARKERS)
+    )
 
 
 async def _goto_with_retries(
@@ -306,13 +326,38 @@ async def _settle_page(page: Page, *, timeout_s: int) -> tuple[float, str, float
     return settle_s, exit_reason, scroll_s
 
 
+def _one_line(message: str, limit: int = _ERROR_MESSAGE_LIMIT) -> str:
+    line = message.splitlines()[0].strip()
+    return line[:limit]
+
+
+def _http_error_kind(http_status: int | None) -> str:
+    if http_status == 404:
+        return "http_404"
+    if http_status == 429:
+        return "rate_limited"
+    if http_status is not None and 400 <= http_status < 500:
+        return "http_4xx"
+    if http_status is not None and http_status >= 500:
+        return "http_5xx"
+    return "internal"
+
+
 def _classify_navigation_error(exc: Exception) -> str:
     message = str(exc)
-    if "ERR_NAME_NOT_RESOLVED" in message or "ERR_NAME_RESOLUTION_FAILED" in message:
+    if any(marker in message for marker in _DNS_ERROR_MARKERS):
         return "dns_error"
+    if any(marker in message for marker in _EMPTY_OR_CONN_MARKERS):
+        return "empty_response"
     if isinstance(exc, PlaywrightTimeoutError):
         return "timeout"
-    return "error"
+    if "429" in message:
+        return "rate_limited"
+    return "internal"
+
+
+def _is_empty_or_connection_kind(kind: str) -> bool:
+    return kind == "empty_response"
 
 
 def _candidate_home_urls(domain: str) -> list[str]:
@@ -409,8 +454,8 @@ async def _fetch_one(
         if status == "error":
             error = ErrorRecord(
                 stage="fetcher",
-                kind=f"http_{http_status}xx" if http_status else "error",
-                message=f"unexpected status {http_status}",
+                kind=_http_error_kind(http_status),
+                message=_one_line(f"unexpected status {http_status}"),
                 url=url,
             )
         return fetched, error
@@ -454,10 +499,16 @@ async def fetch_home(state: DomainState) -> dict:
                 "base_url": fetched.url,
                 "errors": errors,
             }
-        except Exception as exc:  # noqa: BLE001 -- stage boundary: never crash the run (AGENTS.md #3)
+        except Exception as exc:
             kind = _classify_navigation_error(exc)
+            logger.debug("fetch_home failed %s", url, exc_info=True)
             errors.append(
-                ErrorRecord(stage="fetch_home", kind=kind, message=str(exc), url=url)
+                ErrorRecord(
+                    stage="fetch_home",
+                    kind=kind,
+                    message=_one_line(str(exc)),
+                    url=url,
+                )
             )
             if i == len(candidates) - 1:
                 fetched = FetchedPage(
@@ -497,52 +548,112 @@ def _dedupe_links(links: list[FoundLink]) -> list[FoundLink]:
     return list(seen.values())
 
 
+def _remaining_guesses(candidates: list[CandidateLink], current: CandidateLink) -> int:
+    seen_current = False
+    remaining = 0
+    for later in candidates:
+        if later is current:
+            seen_current = True
+            continue
+        if seen_current and later.discovered_by == "guess":
+            remaining += 1
+    return remaining
+
+
+def _harvest_from(
+    fetched: FetchedPage, domain: str, emails: list, links: list
+) -> tuple:
+    if not fetched.html:
+        return emails, links
+    emails = _dedupe_emails(emails + find_emails(fetched.html, fetched.url, domain))
+    links = _dedupe_links(links + find_linkedin_links(fetched.html, fetched.url))
+    return emails, links
+
+
 async def fetch_subpages(state: DomainState) -> dict:
     """Node: fetch the discovered candidate subpages sequentially, with jitter."""
     settings = get_settings()
     domain = state["domain"]
     candidates = state.get("candidates", [])[: settings.max_pages_per_domain]
-    existing_pages = list(state.get("pages", []))
-    candidate_emails = list(state.get("candidate_emails", []))
-    linkedin_links = list(state.get("linkedin_links", []))
+    pages = list(state.get("pages", []))
+    emails = list(state.get("candidate_emails", []))
+    links = list(state.get("linkedin_links", []))
     errors: list[ErrorRecord] = []
+    consecutive_empty = 0
+    skip_guesses = False
 
     for candidate in candidates:
-        jitter_s = random.uniform(0.2, 0.6)
-        await asyncio.sleep(jitter_s)
-        logger.debug("PROFILE jitter=%.2fs before %s", jitter_s, candidate.url)
-        try:
-            fetched, error = await _fetch_one(
-                domain,
-                candidate.url,
-                kind=candidate.kind,
-                discovered_by=candidate.discovered_by,
-                timeout_s=settings.page_timeout_s,
-            )
-            if error is not None:
-                errors.append(error)
-            existing_pages.append(fetched)
-            if fetched.html:
-                candidate_emails = _dedupe_emails(
-                    candidate_emails + find_emails(fetched.html, fetched.url, domain)
+        if candidate.discovered_by == "guess" and skip_guesses:
+            continue
+        await asyncio.sleep(random.uniform(0.2, 0.6))
+        logger.debug("PROFILE jitter before %s", candidate.url)
+        empty, fetched_err = await _fetch_candidate(
+            domain, candidate, settings.page_timeout_s, pages, emails, links, errors
+        )
+        if fetched_err is None and empty is False:
+            consecutive_empty = 0
+        elif empty:
+            consecutive_empty += 1
+        else:
+            consecutive_empty = 0
+        if consecutive_empty >= 2 and not skip_guesses:
+            skip_guesses = True
+            remaining = _remaining_guesses(candidates, candidate)
+            if remaining:
+                errors.append(
+                    ErrorRecord(
+                        stage="fetch_subpages",
+                        kind="empty_response",
+                        message=_one_line(
+                            f"skipped {remaining} guessed URL(s) after 2 consecutive "
+                            "empty/connection failures"
+                        ),
+                        url=candidate.url,
+                    )
                 )
-                linkedin_links = _dedupe_links(
-                    linkedin_links + find_linkedin_links(fetched.html, fetched.url)
-                )
-        except Exception as exc:  # noqa: BLE001 -- stage boundary: never crash the run (AGENTS.md #3)
-            kind = _classify_navigation_error(exc)
-            errors.append(
-                ErrorRecord(
-                    stage="fetch_subpages",
-                    kind=kind,
-                    message=str(exc),
-                    url=candidate.url,
-                )
-            )
 
     return {
-        "pages": existing_pages,
-        "candidate_emails": candidate_emails,
-        "linkedin_links": linkedin_links,
+        "pages": pages,
+        "candidate_emails": emails,
+        "linkedin_links": links,
         "errors": errors,
     }
+
+
+async def _fetch_candidate(
+    domain: str,
+    candidate: CandidateLink,
+    timeout_s: int,
+    pages: list[FetchedPage],
+    emails: list[FoundEmail],
+    links: list[FoundLink],
+    errors: list[ErrorRecord],
+) -> tuple[bool, ErrorRecord | None]:
+    """Fetch one candidate. Mutates pages/emails/links/errors. Returns (is_empty, error)."""
+    try:
+        fetched, error = await _fetch_one(
+            domain,
+            candidate.url,
+            kind=candidate.kind,
+            discovered_by=candidate.discovered_by,
+            timeout_s=timeout_s,
+        )
+    except Exception as exc:
+        kind = _classify_navigation_error(exc)
+        logger.debug("fetch_subpages failed %s", candidate.url, exc_info=True)
+        error = ErrorRecord(
+            stage="fetch_subpages",
+            kind=kind,
+            message=_one_line(str(exc)),
+            url=candidate.url,
+        )
+        errors.append(error)
+        return _is_empty_or_connection_kind(kind), error
+    if error is not None:
+        errors.append(error)
+    pages.append(fetched)
+    harvested = _harvest_from(fetched, domain, emails, links)
+    emails[:] = harvested[0]
+    links[:] = harvested[1]
+    empty = error is not None and _is_empty_or_connection_kind(error.kind)
+    return empty, error

@@ -574,3 +574,30 @@ tool_choice`). Fix: `extra_body={"thinking": {"type": "disabled"}}` on
 
 Total 18424 in / 1404 out, wall 28s. `pytest -q` 31 passed. `output.json` overwritten
 with this run.
+
+2026-09-17 — M3 output-quality pass — Six fixes after reading the live `output.json`.
+
+1. False leaders: prompt now forbids testimonials/customers/investors and titles that
+   name another company. `verify.py` drops foreign-company titles, quote-attribution
+   blocks, and homepage-only names without a founder/CEO/CTO/COO/VP/Head-of title.
+   Tests use the exact Vapi cases (Jason Mitura; Alejandro Maza, Kavak CPO).
+2. Kind keywords match the last path segment; product prefixes
+   (`custom-agents`/`solutions`/`use-cases`/`integrations`) are penalised to ≤0.
+   `/custom-agents/sales-team-agent` is not `team`; `/about/team` is.
+3. supabase.com `/company` and `/careers` cleaned markdown: **not a cleaner bug**.
+   Raw `/company` HTML has Copplestone only in podcast-card titles (not a founder
+   bio); no `mailto:` / `@supabase.io` on any fetched page (twitter `@supabase` is
+   not an email). Cleaner correctly kept the investor list and dropped the podcast
+   cards. Empty emails/leaders is a content gap (`partial` is correct). Did not
+   loosen the prompt to invent them.
+4. Fetcher `ErrorRecord.kind` now uses the resilience.md taxonomy (`http_404`,
+   `empty_response`, `dns_error`, …); messages are one line; Playwright call logs
+   only at DEBUG.
+5. After 2 consecutive `ERR_EMPTY_RESPONSE`/connection failures, remaining guessed
+   URLs are skipped (and those errors are not retried). Target for parked domains
+   is <15s.
+6. Harvested emails stored lowercase (`Talent@vapi.ai` → `talent@vapi.ai`).
+
+Re-run: postman `ok` 0.92 (3 co-founders); vapi `partial` 0.59 (testimonials gone,
+emails lowercased, `/team` 404 guess instead of sales-team-agent); supabase
+`partial` 0.54. `pytest -q` 40 passed.

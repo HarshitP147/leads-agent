@@ -20,8 +20,13 @@ Goal: the run always finishes and always writes `output.json`, even if every dom
 ## Failure taxonomy (`ErrorRecord.kind`)
 
 `dns_error`, `timeout`, `http_404`, `http_4xx`, `http_5xx`, `rate_limited`, `bot_wall`,
-`empty_content`, `sitemap_error`, `agent_error`, `llm_error`, `parse_error`,
-`unverified_person`, `search_error`, `internal`.
+`empty_content`, `empty_response`, `sitemap_error`, `agent_error`, `llm_error`,
+`parse_error`, `unverified_person`, `search_error`, `internal`.
+
+`empty_response` is a Playwright navigation failure (`ERR_EMPTY_RESPONSE`, connection
+reset/refused/closed). `ErrorRecord.message` is one line (first line, capped); the full
+Playwright call log is only emitted at DEBUG (`--debug`). After two consecutive
+`empty_response` failures on a domain, remaining `discovered_by="guess"` URLs are skipped.
 
 ## Rate limits
 

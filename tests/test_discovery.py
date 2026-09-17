@@ -71,3 +71,14 @@ def test_about_still_wins_over_blog_noise() -> None:
 def test_classify_unaffected_for_ordinary_pages() -> None:
     assert _classify("/about", "")[0] == "about"
     assert _classify("/pricing", "")[0] == "pricing"
+
+
+def test_product_sales_team_agent_is_not_kind_team() -> None:
+    classified = _classify("/custom-agents/sales-team-agent", "")
+    assert classified is None or classified[0] != "team"
+
+
+def test_about_team_is_kind_team() -> None:
+    classified = _classify("/about/team", "")
+    assert classified is not None
+    assert classified[0] == "team"

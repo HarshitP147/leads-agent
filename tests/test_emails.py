@@ -49,6 +49,12 @@ def test_off_site_plain_text_email_dropped_unless_mailto() -> None:
     assert [e.email for e in emails] == ["partner@unrelated-vendor.com"]
 
 
+def test_emails_are_normalised_to_lowercase() -> None:
+    html = '<a href="mailto:Talent@vapi.ai">Jobs</a>'
+    emails = find_emails(html, "https://vapi.ai/careers", "vapi.ai")
+    assert [e.email for e in emails] == ["talent@vapi.ai"]
+
+
 def test_duplicate_emails_deduped_within_one_page() -> None:
     html = (
         '<a href="mailto:hello@acme-corp.io">Email</a>'

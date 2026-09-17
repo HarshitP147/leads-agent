@@ -18,7 +18,11 @@ from pydantic import BaseModel, Field
 class LLMLeader(BaseModel):
     name: str = Field(description="Full name exactly as written on the page.")
     title: str | None = Field(
-        None, description="Role/title exactly as written, e.g. 'Co-founder & CEO'."
+        None,
+        description=(
+            "Role at the TARGET company exactly as written, e.g. 'Co-founder & CEO'. "
+            "If the title names a different company, omit this person."
+        ),
     )
     linkedin_url: str | None = Field(
         None,
@@ -60,7 +64,11 @@ class LLMExtraction(BaseModel):
     contact_emails: list[LLMEmail] = Field(default_factory=list)
     leaders: list[LLMLeader] = Field(
         default_factory=list,
-        description="Only people explicitly shown as founders, executives, or leadership. Empty list if none are named.",
+        description=(
+            "People who work AT this company (founders, executives, team). "
+            "Exclude testimonials, customers, advisors, investors, and blog authors. "
+            "Empty list if none are named."
+        ),
     )
     self_confidence: float = Field(
         ge=0.0,

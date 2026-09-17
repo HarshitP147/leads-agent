@@ -10,10 +10,12 @@ import re
 import time
 import unicodedata
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 from enrich.models import ContactEmail, ErrorRecord, Leader, LLMExtraction, LLMLeader
 
 if TYPE_CHECKING:
+    from enrich.cleaner import CleanPage
     from enrich.state import DomainState
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,78 @@ LINKEDIN_RE = re.compile(
     re.IGNORECASE,
 )
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+_TITLE_SPLIT_RE = re.compile(
+    r"\s*(?:,|(?:\bat\b)|[|@]|(?:\s[-–—]\s))\s*", re.IGNORECASE
+)
+_STRONG_TITLE_RE = re.compile(
+    r"\b(founder|co-?founder|ceo|cto|coo|cfo|president|vp|"
+    r"vice[ -]?president|head of)\b",
+    re.IGNORECASE,
+)
+PREFERRED_LEADER_KINDS = frozenset({"about", "team", "company", "leadership"})
+QUOTE_CHARS = frozenset('"“”«»')
+TESTIMONIAL_MARKERS = (
+    "testimonial",
+    "customer stor",
+    "read the story",
+    "trusted by",
+    "what our customers",
+    "success stor",
+    "case study",
+)
+ROLE_OR_DEPT = frozenset(
+    {
+        "founder",
+        "cofounder",
+        "co",
+        "ceo",
+        "cto",
+        "coo",
+        "cfo",
+        "cpo",
+        "cro",
+        "president",
+        "vp",
+        "vice",
+        "head",
+        "director",
+        "officer",
+        "chief",
+        "engineer",
+        "engineering",
+        "manager",
+        "lead",
+        "product",
+        "ai",
+        "software",
+        "development",
+        "developer",
+        "sales",
+        "marketing",
+        "design",
+        "operations",
+        "people",
+        "finance",
+        "legal",
+        "research",
+        "customer",
+        "success",
+        "support",
+        "growth",
+        "talent",
+        "communications",
+        "data",
+        "staff",
+        "principal",
+        "senior",
+        "junior",
+        "intern",
+        "and",
+        "the",
+        "of",
+        "for",
+    }
+)
 MAX_LEADERS = 10
 
 
@@ -86,22 +160,84 @@ def _linkedin_kept(url: str | None, state: DomainState) -> str | None:
     return None
 
 
-def _verify_leaders(
-    extraction: LLMExtraction, state: DomainState
-) -> tuple[list[Leader], list[ErrorRecord]]:
-    haystacks = _haystacks(state)
-    leaders: list[Leader] = []
-    errors: list[ErrorRecord] = []
-    seen: set[str] = set()
-    for item in extraction.leaders:
-        kept, error = _one_leader(item, haystacks, seen, state)
-        if error is not None:
-            errors.append(error)
-        if kept is not None:
-            leaders.append(kept)
-        if len(leaders) >= MAX_LEADERS:
-            break
-    return leaders, errors
+def _target_tokens(company_name: str, domain: str) -> set[str]:
+    tokens = set(_normalise_name(company_name).split())
+    host = urlparse(f"https://{domain}").hostname or domain
+    stem = host.lower().removeprefix("www.").split(".")[0]
+    if stem:
+        tokens.add(stem)
+    return {tok for tok in tokens if tok}
+
+
+def _foreign_company_in_title(title: str | None, allowed: set[str]) -> bool:
+    """True if the title names a company other than the target (e.g. 'CPO, Kavak')."""
+    if not title:
+        return False
+    parts = [p.strip() for p in _TITLE_SPLIT_RE.split(title) if p.strip()]
+    if len(parts) < 2:
+        return False
+    for part in parts[1:]:
+        tokens = _normalise_name(part).split()
+        if not tokens:
+            continue
+        if any(tok in allowed for tok in tokens):
+            continue
+        if all(tok in ROLE_OR_DEPT for tok in tokens):
+            continue
+        return True
+    return False
+
+
+def _page_for_url(url: str, pages: list[CleanPage]) -> CleanPage | None:
+    needle = url.rstrip("/")
+    for page in pages:
+        if page.url.rstrip("/") == needle:
+            return page
+    return None
+
+
+def _name_on_preferred_pages(name: str, state: DomainState) -> bool:
+    for page in state.get("cleaned", []):
+        if page.kind not in PREFERRED_LEADER_KINDS:
+            continue
+        if _name_grounded(name, [_normalise_name(page.markdown)]):
+            return True
+    for card in state.get("team_cards", []):
+        if _name_grounded(name, [_normalise_name(card.name)]):
+            return True
+    return False
+
+
+def _in_quote_context(name: str, evidence: str, markdown: str) -> bool:
+    """True if the name sits in a testimonial/quote attribution block."""
+    ev = (evidence or "").strip()
+    if ev[:1] in QUOTE_CHARS or ev[-1:] in QUOTE_CHARS:
+        return True
+    low = markdown.casefold()
+    idx = low.find(name.casefold())
+    if idx < 0 and ev:
+        idx = low.find(ev[:40].casefold())
+    if idx < 0:
+        return False
+    window = markdown[max(0, idx - 400) : idx + 80]
+    if any(marker in window.casefold() for marker in TESTIMONIAL_MARKERS):
+        return True
+    before = markdown[max(0, idx - 250) : idx]
+    if not any(char in before for char in QUOTE_CHARS):
+        return False
+    line_start = markdown.rfind("\n", 0, idx) + 1
+    line_end = markdown.find("\n", idx)
+    line = markdown[line_start : line_end if line_end != -1 else None].strip()
+    return len(line) < 120
+
+
+def _drop(item: LLMLeader, reason: str) -> tuple[None, ErrorRecord]:
+    return None, ErrorRecord(
+        stage="verify",
+        kind="unverified_person",
+        message=f"dropped {reason}: {item.name}",
+        url=item.source_url,
+    )
 
 
 def _one_leader(
@@ -109,17 +245,22 @@ def _one_leader(
     haystacks: list[str],
     seen: set[str],
     state: DomainState,
+    allowed: set[str],
 ) -> tuple[Leader | None, ErrorRecord | None]:
     key = _normalise_name(item.name)
     if not key or key in seen:
         return None, None
     if not _name_grounded(item.name, haystacks):
-        return None, ErrorRecord(
-            stage="verify",
-            kind="unverified_person",
-            message=f"dropped unverified leader: {item.name}",
-            url=item.source_url,
-        )
+        return _drop(item, "unverified leader")
+    if _foreign_company_in_title(item.title, allowed):
+        return _drop(item, "foreign-company title")
+    source_page = _page_for_url(item.source_url, state.get("cleaned", []))
+    markdown = source_page.markdown if source_page is not None else ""
+    if markdown and _in_quote_context(item.name, item.evidence, markdown):
+        return _drop(item, "testimonial/quote")
+    homepage_only = not _name_on_preferred_pages(item.name, state)
+    if homepage_only and not _STRONG_TITLE_RE.search(item.title or ""):
+        return _drop(item, "homepage-only without exec title")
     seen.add(key)
     linkedin = _linkedin_kept(item.linkedin_url, state)
     return (
@@ -135,6 +276,25 @@ def _one_leader(
     )
 
 
+def _verify_leaders(
+    extraction: LLMExtraction, state: DomainState
+) -> tuple[list[Leader], list[ErrorRecord]]:
+    haystacks = _haystacks(state)
+    allowed = _target_tokens(extraction.company_name, state.get("domain", ""))
+    leaders: list[Leader] = []
+    errors: list[ErrorRecord] = []
+    seen: set[str] = set()
+    for item in extraction.leaders:
+        kept, error = _one_leader(item, haystacks, seen, state, allowed)
+        if error is not None:
+            errors.append(error)
+        if kept is not None:
+            leaders.append(kept)
+        if len(leaders) >= MAX_LEADERS:
+            break
+    return leaders, errors
+
+
 def _verify_emails(extraction: LLMExtraction, state: DomainState) -> list[ContactEmail]:
     candidates = {e.email.lower(): e for e in state.get("candidate_emails", [])}
     out: list[ContactEmail] = []
@@ -146,7 +306,9 @@ def _verify_emails(extraction: LLMExtraction, state: DomainState) -> list[Contac
         seen.add(found.email.lower())
         out.append(
             ContactEmail(
-                email=found.email, purpose=item.purpose, source_url=found.source_url
+                email=found.email.lower(),
+                purpose=item.purpose,
+                source_url=found.source_url,
             )
         )
     for key, found in candidates.items():
@@ -155,7 +317,7 @@ def _verify_emails(extraction: LLMExtraction, state: DomainState) -> list[Contac
         seen.add(key)
         out.append(
             ContactEmail(
-                email=found.email, purpose="other", source_url=found.source_url
+                email=found.email.lower(), purpose="other", source_url=found.source_url
             )
         )
     return out

@@ -121,6 +121,82 @@ async def test_bad_linkedin_url_is_nulled() -> None:
     assert by_name["Ada Example"].linkedin_source == "website"
 
 
+VAPI_HOME = "https://vapi.ai/"
+VAPI_TESTIMONIAL_MD = """
+Vapi is a platform for voice agents.
+
+"Vapi helped us ship voice agents in a week."
+Jason Mitura
+VP of Software Development
+
+"The product is incredible."
+Alejandro Maza, Chief Product & AI Officer, Kavak
+"""
+
+
+def _vapi_state(leaders: list[LLMLeader]) -> dict:
+    extraction = LLMExtraction(
+        company_name="Vapi",
+        overview="Vapi builds voice agents. Developers use them.",
+        target_audience="Developers.",
+        industries=["software"],
+        leaders=leaders,
+        self_confidence=0.7,
+    )
+    return {
+        "domain": "vapi.ai",
+        "cleaned": [
+            CleanPage(
+                url=VAPI_HOME,
+                kind="home",
+                markdown=VAPI_TESTIMONIAL_MD,
+                raw_tokens=200,
+                clean_tokens=80,
+            )
+        ],
+        "candidate_emails": [],
+        "linkedin_links": [],
+        "team_cards": [],
+        "extraction": extraction,
+        "errors": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_vapi_testimonial_jason_mitura_is_dropped() -> None:
+    extraction_leaders = [
+        _leader(
+            "Jason Mitura",
+            title="VP of Software Development",
+            source_url=VAPI_HOME,
+        )
+    ]
+    # evidence is the quoted homepage snippet
+    extraction_leaders[0].evidence = '"Vapi helped us ship voice agents in a week."'
+    update = await verify(_vapi_state(extraction_leaders))
+    assert update["leaders"] == []
+    assert update["errors"][0].kind == "unverified_person"
+    assert "Jason Mitura" in update["errors"][0].message
+
+
+@pytest.mark.asyncio
+async def test_vapi_kavak_cpo_alejandro_maza_is_dropped() -> None:
+    update = await verify(
+        _vapi_state(
+            [
+                _leader(
+                    "Alejandro Maza",
+                    title="Chief Product & AI Officer, Kavak",
+                    source_url=VAPI_HOME,
+                )
+            ]
+        )
+    )
+    assert update["leaders"] == []
+    assert update["errors"][0].kind == "unverified_person"
+    assert "Alejandro Maza" in update["errors"][0].message
+
+
 @pytest.mark.asyncio
 async def test_candidate_email_ignored_by_llm_is_still_kept() -> None:
     extraction = _extraction(
