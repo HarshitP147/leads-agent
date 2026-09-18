@@ -39,7 +39,14 @@ MAX_DISCOVERED_LEADERS = 5
 # + 3 fallback + 2 email) for zero accepted results before this cap existed. `_search`
 # checks the shared budget synchronously before every call, so no code path — known-
 # leader enrichment, cold discovery, or email search — can exceed it for one domain.
-MAX_TAVILY_CALLS_PER_DOMAIN = 3
+# 5, not 3: with email search spending its fixed 2 calls first, a 3-call budget left
+# zero room for a single fallback profile lookup — supabase.com's real founders (Ant
+# Wilson, Paul Copplestone) have strong role evidence in LinkedIn post/comment text,
+# but their direct /in/ profile page gets crowded out of the top-10 results by that
+# same post/comment noise, so a *second*, name-targeted query is often required to
+# actually resolve the profile URL. EARLY_STOP_AFTER_EMPTY_QUERIES still bounds the
+# wasted-call case regardless of how large this budget is.
+MAX_TAVILY_CALLS_PER_DOMAIN = 5
 # If the first EARLY_STOP_AFTER_EMPTY_QUERIES leader-discovery queries (the initial
 # broad query plus fallbacks) all come back with zero accepted role evidence, stop
 # spending the remaining budget on more fallback queries for this domain.
@@ -299,17 +306,36 @@ async def _discover_leaders(
     outcomes = [outcome]
     roles = _role_evidence(outcome.results, aliases)
     empty_streak = 0 if roles else 1
+    # Two different reasons a name needs a targeted follow-up query, both real and
+    # both observed live on supabase.com: (1) `_profile_name` found a direct /in/
+    # result but no nearby role text corroborates it yet; (2) role evidence names
+    # someone (e.g. "Ant Wilson, Co-Founder & CTO" in a LinkedIn *post's* text) but no
+    # direct /in/ profile page for them made the top-10 results — well-known founders'
+    # own post/comment activity crowds their profile page out of a broad query.
+    # Each candidate is tagged with what it's still missing, since that's what decides
+    # whether its fallback query actually helped (see the productivity check below):
+    # a "needs_role" candidate already has a resolvable profile and is looking for
+    # role text; a "needs_profile" one already has role text and is looking for a
+    # resolvable profile. Conflating the two would make a "needs_role" candidate look
+    # falsely productive purely because its (already-known) profile URL still
+    # resolves on every query — that's not new information.
     missing_roles = [
-        name
+        ("needs_role", name)
         for result in outcome.results
         if (name := _profile_name(result, aliases)) is not None
         and _normalise(name) not in roles
-    ][:3]
+    ]
+    unresolved_role_names = [
+        ("needs_profile", evidence.name)
+        for evidence in roles.values()
+        if _profile_url(evidence.name, outcome.results, aliases) is None
+    ]
+    fallback_candidates = (missing_roles + unresolved_role_names)[:3]
     # Sequential, not gathered: each fallback query's result decides whether the next
     # one is worth running at all (see EARLY_STOP_AFTER_EMPTY_QUERIES) — münchen.de and
-    # mercadolibre.com used to burn all 3 fallback calls even after the very first two
+    # mercadolibre.com used to burn all fallback calls even after the very first two
     # queries came back with nothing.
-    for name in missing_roles:
+    for need, name in fallback_candidates:
         if empty_streak >= EARLY_STOP_AFTER_EMPTY_QUERIES or budget.remaining <= 0:
             break
         fallback_outcome = await _search(
@@ -319,9 +345,13 @@ async def _discover_leaders(
             budget=budget,
         )
         outcomes.append(fallback_outcome)
-        empty_streak = (
-            0 if _role_evidence(fallback_outcome.results, aliases) else empty_streak + 1
-        )
+        if need == "needs_role":
+            productive = bool(_role_evidence(fallback_outcome.results, aliases))
+        else:
+            productive = (
+                _profile_url(name, fallback_outcome.results, aliases) is not None
+            )
+        empty_streak = 0 if productive else empty_streak + 1
     combined = [result for item in outcomes for result in item.results]
     roles = _role_evidence(combined, aliases)
     leaders: list[Leader] = []

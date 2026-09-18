@@ -313,13 +313,35 @@ class _AlwaysHitLinkedInClient:
     async def search(self, query: str, **kwargs: object) -> dict:
         if kwargs.get("include_domains") == ["linkedin.com"]:
             self.linkedin_calls += 1
-            n = self.linkedin_calls
+            if self.linkedin_calls == 1:
+                # 3 people with role evidence, none with a resolvable direct profile
+                # in this batch — the real supabase.com shape (a well-known founder's
+                # own post/comment activity crowds their /in/ page out of the top
+                # results), which is exactly what forces every fallback slot to be
+                # used and lets the budget (not early-stop) end the loop.
+                names = ("Jordan Alpha", "Jordan Beta", "Jordan Gamma")
+                return {
+                    "results": [
+                        {
+                            "title": f"post about {name}",
+                            "url": f"https://www.linkedin.com/posts/{name.lower().replace(' ', '-')}_post",
+                            "content": f"{name} Co-Founder & CEO at Acme.",
+                        }
+                        for name in names
+                    ]
+                }
+            # Every fallback query "succeeds" (fresh role evidence each time) but
+            # still never resolves a direct profile — early-stop never triggers, so
+            # only the budget can be what ends this.
+            name = ("Fallback Delta", "Fallback Epsilon", "Fallback Zeta")[
+                self.linkedin_calls - 2
+            ]
             return {
                 "results": [
                     {
-                        "title": f"Jordan Founder{n}",
-                        "url": f"https://www.linkedin.com/in/jordan-founder-{n}",
-                        "content": f"Jordan Founder{n} Co-Founder & CEO at Acme.",
+                        "title": f"post about {name}",
+                        "url": "https://www.linkedin.com/posts/fallback-person_post",
+                        "content": f"{name} Co-Founder & CEO at Acme.",
                     }
                 ]
             }
@@ -333,8 +355,9 @@ async def test_search_linkedin_never_exceeds_the_tavily_call_cap(
 ) -> None:
     """münchen.de and mercadolibre.com each burned 6 Tavily calls (1 discovery + 3
     fallback + 2 email) for zero accepted results before the shared budget existed.
-    Here every query succeeds (so early-stop never triggers), proving the 3-call cap
-    itself — not a lucky early stop — is what bounds the total."""
+    Here every query succeeds (so early-stop never triggers) but never resolves a
+    direct profile (so there's always another fallback candidate to try), proving the
+    budget itself — not a lucky early stop — is what bounds the total."""
     client = _AlwaysHitLinkedInClient()
     monkeypatch.setattr(search, "AsyncTavilyClient", lambda api_key: client)
     monkeypatch.setattr(

@@ -1,170 +1,13 @@
 [
   {
-    "domain": "supabase.com",
-    "status": "ok",
-    "profile": {
-      "company_name": "Supabase",
-      "overview": "Supabase is the Postgres development platform, built by developers for developers, adding auth, realtime, storage, restful APIs, and edge functions on top of a dedicated Postgres database. It is an open source, fully remote company offering a dashboard, production-ready starter templates, and usage-based compute pricing that scales from a free tier to enterprise.",
-      "target_audience": "Developers and teams building applications who need a Postgres-based backend with auth, storage, realtime, and APIs.",
-      "industries": [
-        "Developer tools",
-        "Cloud infrastructure",
-        "Database software",
-        "Open source software",
-        "SaaS"
-      ],
-      "contact_emails": [
-        {
-          "email": "abuse@supabase.com",
-          "purpose": "security",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "security@supabase.com",
-          "purpose": "security",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "help-events@supabase.com",
-          "purpose": "support",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "legal@supabase.com",
-          "purpose": "other",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "privacy@supabase.com",
-          "purpose": "privacy",
-          "source_url": "https://supabase.com/contact-us"
-        },
-        {
-          "email": "legal@supabase.io",
-          "purpose": "other",
-          "source_url": "https://supabase.com/terms"
-        },
-        {
-          "email": "abuse@supabase.io",
-          "purpose": "security",
-          "source_url": "http://www.supabase.com/aup"
-        },
-        {
-          "email": "support@supabase.com",
-          "purpose": "support",
-          "source_url": "https://supabase.com/docs/guides/troubleshooting/i-am-not-receiving-password-reset-emails-for-supabase-dashboard--cO5yf"
-        }
-      ],
-      "leaders": [
-        {
-          "name": "Ant Wilson",
-          "title": "Co-Founder & CTO",
-          "linkedin_url": "https://uk.linkedin.com/in/ant-wilson-46179937",
-          "linkedin_source": "search",
-          "source_url": "https://www.linkedin.com/posts/ant-wilson-46179937_5-years-of-supabase-activity-7282683473134252033-usoO",
-          "verified": true
-        }
-      ]
-    },
-    "confidence": {
-      "score": 0.86,
-      "components": {
-        "field_coverage": 1.0,
-        "leader_quality": 1.0,
-        "source_coverage": 0.75,
-        "fetch_health": 1.0,
-        "llm_self": 0.55
-      }
-    },
-    "pages": [
-      {
-        "url": "https://supabase.com/",
-        "kind": "home",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 546266,
-        "clean_tokens": 537,
-        "discovered_by": "seed"
-      },
-      {
-        "url": "https://supabase.com/contribute/about",
-        "kind": "about",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 69216,
-        "clean_tokens": 553,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/pricing",
-        "kind": "pricing",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 157924,
-        "clean_tokens": 3199,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/careers",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 345276,
-        "clean_tokens": 500,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/contact/sales",
-        "kind": "contact",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 41939,
-        "clean_tokens": 72,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/company",
-        "kind": "company",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 68232,
-        "clean_tokens": 443,
-        "discovered_by": "sitemap"
-      },
-      {
-        "url": "https://supabase.com/support",
-        "kind": "contact",
-        "status": "ok",
-        "http_status": 200,
-        "raw_tokens": 39732,
-        "clean_tokens": 107,
-        "discovered_by": "sitemap"
-      }
-    ],
-    "errors": [],
-    "usage": {
-      "input_tokens": 6583,
-      "output_tokens": 358,
-      "llm_calls": 1,
-      "search_calls": 3,
-      "est_cost_usd": 0.026405,
-      "by_component": {
-        "extraction": 0.002404,
-        "search": 0.024
-      }
-    },
-    "duration_s": 19.90693574998295,
-    "scraped_at": "2026-09-17T18:43:05.875154+00:00"
-  },
-  {
     "domain": "vapi.ai",
     "status": "ok",
     "profile": {
       "company_name": "Vapi",
-      "overview": "Vapi is a platform for building, testing, and deploying AI voice agents, handling orchestration, telephony, and real-time monitoring so teams can go from prompt to production quickly. It offers enterprise-grade capabilities including SSO, RBAC, guardrails, and compliance with SOC 2, HIPAA, and PCI standards.",
-      "target_audience": "Developers and enterprise teams building and scaling production voice AI agents",
+      "overview": "Vapi is a unified platform for building, testing, and deploying AI voice agents, handling orchestration, telephony, and real-time monitoring so teams can go from prompt to production quickly. It provides enterprise-grade capabilities including scalable infrastructure supporting millions of calls with sub-500ms latency, SSO/OAuth/RBAC, and SOC 2, HIPAA, and PCI compliance.",
+      "target_audience": "Developers and enterprise teams building and scaling production AI voice agents",
       "industries": [
-        "Voice AI",
+        "Artificial Intelligence",
         "Developer Tools",
         "Enterprise Software",
         "Customer Support",
@@ -202,13 +45,13 @@
       ]
     },
     "confidence": {
-      "score": 0.85,
+      "score": 0.86,
       "components": {
         "field_coverage": 1.0,
         "leader_quality": 1.0,
         "source_coverage": 0.75,
         "fetch_health": 0.8571428571428571,
-        "llm_self": 0.55
+        "llm_self": 0.6
       }
     },
     "pages": [
@@ -217,7 +60,7 @@
         "kind": "home",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 95241,
+        "raw_tokens": 1177291,
         "clean_tokens": 467,
         "discovered_by": "seed"
       },
@@ -226,7 +69,7 @@
         "kind": "company",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 236425,
+        "raw_tokens": 230513,
         "clean_tokens": 457,
         "discovered_by": "sitemap"
       },
@@ -235,7 +78,7 @@
         "kind": "pricing",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 97228,
+        "raw_tokens": 96352,
         "clean_tokens": 679,
         "discovered_by": "sitemap"
       },
@@ -244,7 +87,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 151811,
+        "raw_tokens": 151664,
         "clean_tokens": 80,
         "discovered_by": "sitemap"
       },
@@ -253,7 +96,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 100444,
+        "raw_tokens": 100428,
         "clean_tokens": 334,
         "discovered_by": "sitemap"
       },
@@ -262,7 +105,7 @@
         "kind": "contact",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 307848,
+        "raw_tokens": 304105,
         "clean_tokens": 332,
         "discovered_by": "anchor"
       },
@@ -286,30 +129,175 @@
     ],
     "usage": {
       "input_tokens": 3553,
-      "output_tokens": 362,
+      "output_tokens": 390,
       "llm_calls": 1,
       "search_calls": 3,
-      "est_cost_usd": 0.0255,
+      "est_cost_usd": 0.025534,
       "by_component": {
-        "extraction": 0.0015,
+        "extraction": 0.001534,
         "search": 0.024
       }
     },
-    "duration_s": 25.872339499997906,
-    "scraped_at": "2026-09-17T18:43:11.841609+00:00"
+    "duration_s": 18.6186644580157,
+    "scraped_at": "2026-09-18T10:55:53.014538+00:00"
+  },
+  {
+    "domain": "supabase.com",
+    "status": "ok",
+    "profile": {
+      "company_name": "Supabase",
+      "overview": "Supabase is the Postgres development platform, built by developers for developers. It adds auth, realtime, storage, restful APIs, and edge functions on top of a dedicated Postgres database, all managed from a dashboard.",
+      "target_audience": "Developers and teams building web, mobile, and AI applications who need a scalable Postgres backend.",
+      "industries": [
+        "Developer tools",
+        "Cloud infrastructure",
+        "Database software",
+        "Open source software",
+        "SaaS"
+      ],
+      "contact_emails": [
+        {
+          "email": "legal@supabase.io",
+          "purpose": "other",
+          "source_url": "https://supabase.com/terms"
+        },
+        {
+          "email": "abuse@supabase.io",
+          "purpose": "security",
+          "source_url": "http://www.supabase.com/aup"
+        },
+        {
+          "email": "privacy@supabase.com",
+          "purpose": "privacy",
+          "source_url": "http://supabase.com/privacy-260316"
+        },
+        {
+          "email": "support@supabase.com",
+          "purpose": "support",
+          "source_url": "https://supabase.com/docs/guides/troubleshooting/i-am-not-receiving-password-reset-emails-for-supabase-dashboard--cO5yf"
+        }
+      ],
+      "leaders": [
+        {
+          "name": "Ant Wilson",
+          "title": "Co-Founder & CTO",
+          "linkedin_url": "https://uk.linkedin.com/in/ant-wilson-46179937",
+          "linkedin_source": "search",
+          "source_url": "https://www.linkedin.com/posts/ant-wilson-46179937_5-years-of-supabase-activity-7282683473134252033-usoO",
+          "verified": true
+        },
+        {
+          "name": "Paul Copplestone",
+          "title": "founder",
+          "linkedin_url": "https://www.linkedin.com/in/paulcopplestone",
+          "linkedin_source": "search",
+          "source_url": "https://www.linkedin.com/posts/david-lorenz_insights-and-advice-from-the-ceo-of-supabase-activity-7142853911991787520-Cx68",
+          "verified": true
+        }
+      ]
+    },
+    "confidence": {
+      "score": 0.86,
+      "components": {
+        "field_coverage": 1.0,
+        "leader_quality": 1.0,
+        "source_coverage": 0.75,
+        "fetch_health": 1.0,
+        "llm_self": 0.55
+      }
+    },
+    "pages": [
+      {
+        "url": "https://supabase.com/",
+        "kind": "home",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 545602,
+        "clean_tokens": 537,
+        "discovered_by": "seed"
+      },
+      {
+        "url": "https://supabase.com/contribute/about",
+        "kind": "about",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 69251,
+        "clean_tokens": 553,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/pricing",
+        "kind": "pricing",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 157980,
+        "clean_tokens": 3199,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/careers",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 346023,
+        "clean_tokens": 500,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/contact/sales",
+        "kind": "contact",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 42060,
+        "clean_tokens": 72,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/company",
+        "kind": "company",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 68373,
+        "clean_tokens": 443,
+        "discovered_by": "sitemap"
+      },
+      {
+        "url": "https://supabase.com/support",
+        "kind": "contact",
+        "status": "ok",
+        "http_status": 200,
+        "raw_tokens": 39903,
+        "clean_tokens": 107,
+        "discovered_by": "sitemap"
+      }
+    ],
+    "errors": [],
+    "usage": {
+      "input_tokens": 6583,
+      "output_tokens": 331,
+      "llm_calls": 1,
+      "search_calls": 5,
+      "est_cost_usd": 0.042372,
+      "by_component": {
+        "extraction": 0.002372,
+        "search": 0.04
+      }
+    },
+    "duration_s": 20.934199915995123,
+    "scraped_at": "2026-09-18T10:55:55.329083+00:00"
   },
   {
     "domain": "postman.com",
     "status": "ok",
     "profile": {
       "company_name": "Postman",
-      "overview": "Postman is an API platform for building, testing, managing, and distributing APIs, now positioned as an AI-native API platform with an AI Engineer that handles API work across an organization. It offers an API client and core tools, specs and mock servers, native Git, monitoring, Flows automation, and enterprise governance capabilities across Free, Solo, Team, and Enterprise plans.",
-      "target_audience": "Individual developers, API teams, and enterprises building, testing, managing, and distributing APIs at scale.",
+      "overview": "Postman is an API platform for building, testing, managing, and distributing APIs, now positioned as an AI-native API platform with an AI Engineer that automates API work. It offers an API client, specs and mock servers, monitoring, Flows automation, and enterprise governance capabilities across Free, Solo, Team, and Enterprise plans.",
+      "target_audience": "Software developers, QA/test engineers, and enterprise API teams building, testing, and governing APIs",
       "industries": [
         "Software",
-        "API Development Tools",
-        "Enterprise Software",
-        "Developer Tools"
+        "Information Technology",
+        "Developer Tools",
+        "Enterprise Software"
       ],
       "contact_emails": [
         {
@@ -335,7 +323,12 @@
         {
           "email": "security@postman.com",
           "purpose": "security",
-          "source_url": "https://www.postman.com/trust/security"
+          "source_url": "https://www.postman.com/security"
+        },
+        {
+          "email": "sales@postman.com",
+          "purpose": "sales",
+          "source_url": "https://www.postman.com/legal/archives/eula-03312021"
         }
       ],
       "leaders": [
@@ -350,26 +343,26 @@
         {
           "name": "Ankit Sobti",
           "title": "Co-founder",
-          "linkedin_url": null,
-          "linkedin_source": null,
+          "linkedin_url": "https://www.linkedin.com/in/ankit-sobti",
+          "linkedin_source": "search",
           "source_url": "https://www.postman.com/company/about-postman/",
           "verified": true
         },
         {
           "name": "Abhijit Kane",
           "title": "Co-founder",
-          "linkedin_url": null,
-          "linkedin_source": null,
+          "linkedin_url": "https://in.linkedin.com/in/abhijitkane",
+          "linkedin_source": "search",
           "source_url": "https://www.postman.com/company/about-postman/",
           "verified": true
         }
       ]
     },
     "confidence": {
-      "score": 0.94,
+      "score": 0.97,
       "components": {
         "field_coverage": 1.0,
-        "leader_quality": 0.8333333333333334,
+        "leader_quality": 1.0,
         "source_coverage": 1.0,
         "fetch_health": 1.0,
         "llm_self": 0.85
@@ -381,7 +374,7 @@
         "kind": "home",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 100201,
+        "raw_tokens": 100158,
         "clean_tokens": 73,
         "discovered_by": "seed"
       },
@@ -399,7 +392,7 @@
         "kind": "pricing",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 301194,
+        "raw_tokens": 301382,
         "clean_tokens": 10,
         "discovered_by": "anchor"
       },
@@ -426,7 +419,7 @@
         "kind": "team",
         "status": "ok",
         "http_status": 200,
-        "raw_tokens": 301194,
+        "raw_tokens": 301382,
         "clean_tokens": 10,
         "discovered_by": "guess"
       },
@@ -443,16 +436,16 @@
     "errors": [],
     "usage": {
       "input_tokens": 7210,
-      "output_tokens": 585,
+      "output_tokens": 588,
       "llm_calls": 1,
-      "search_calls": 3,
-      "est_cost_usd": 0.026865,
+      "search_calls": 5,
+      "est_cost_usd": 0.042869,
       "by_component": {
-        "extraction": 0.002865,
-        "search": 0.024
+        "extraction": 0.002869,
+        "search": 0.04
       }
     },
-    "duration_s": 39.14251529201283,
-    "scraped_at": "2026-09-17T18:43:25.109209+00:00"
+    "duration_s": 33.924450207996415,
+    "scraped_at": "2026-09-18T10:56:08.317879+00:00"
   }
 ]
